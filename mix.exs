@@ -28,7 +28,18 @@ defmodule IgniterJs.MixProject do
   defp package() do
     [
       name: :igniter_js,
-      files: ~w(lib .formatter.exs mix.exs LICENSE README*),
+      files: ~w[
+          lib
+          native/igniter_js/src
+          native/igniter_js/Cargo.*
+          native/igniter_js/README.md
+          native/igniter_js/.cargo
+          checksum-*.exs
+          .formatter.exs
+          mix.exs
+          LICENSE
+          README*
+        ],
       maintainers: ["Zach Daniel", "Shahryar Tavakkoli"],
       licenses: ["MIT"],
       links: %{
@@ -94,7 +105,8 @@ defmodule IgniterJs.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:rustler, "~> 0.35.1"},
+      {:rustler, ">= 0.0.0", optional: true},
+      {:rustler_precompiled, "~> 0.8"},
       {:ex_doc, "~> 0.35", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.12", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},

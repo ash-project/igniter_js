@@ -30,3 +30,7 @@ igniter_js-*.tar
 
 # Developer environment files
 .DS_Store
+
+# ignore local builds
+checksum-Elixir.*.exs
+*.so
