@@ -7,7 +7,7 @@
 
 # IgniterJs
 
-IgniterJs is javascript patching functionality for [Igniter](https://hexdocs.pm/ash/igniter)
+IgniterJs is javascript patching functionality for [Igniter](https://hexdocs.pm/igniter)
 
 ## Installation
 
