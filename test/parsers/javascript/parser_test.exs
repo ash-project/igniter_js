@@ -267,11 +267,11 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
   test "Get statistics from the given file or content :: statistics" do
     {:error, :statistics, _statistics} = assert Parser.statistics(@invalid_error_import, :path)
     {:ok, :statistics, statistics} = assert Parser.statistics(@valid_ast_statistics, :path)
-     2 = assert statistics.functions
-     1 = assert statistics.classes
-     2 = assert statistics.debuggers
-     2 = assert statistics.imports
-     0 = assert statistics.trys
-     0 = assert statistics.throws
+    2 = assert statistics.functions
+    1 = assert statistics.classes
+    2 = assert statistics.debuggers
+    2 = assert statistics.imports
+    0 = assert statistics.trys
+    0 = assert statistics.throws
   end
 end
