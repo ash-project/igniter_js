@@ -1,3 +1,10 @@
+//! # ASTStatistics Module
+//!
+//! This module provides functionality to parse JavaScript source code and
+//! extract statistics about specific AST nodes,
+//! such as functions, classes, debugger statements, imports, try-catch blocks, and throw statements.
+//! It is designed to work with Elixir via the `rustler` library.
+
 #![allow(clippy::print_stdout)]
 use crate::parsers::javascript::ast::source_to_ast;
 use oxc::{
@@ -12,11 +19,19 @@ use oxc::{
     syntax::scope::ScopeFlags,
 };
 
-use rustler::NifStruct;
+use rustler::{NifStruct, NifTaggedEnum};
 
+#[derive(NifTaggedEnum)]
+pub enum ASTStatisticsResultType {
+    Statistics(ASTStatistics),
+    Error(String),
+}
+
+/// Represents the statistics gathered from JavaScript source code.
+/// Each field corresponds to a specific type of AST node.
 #[derive(Debug, Default, NifStruct)]
-#[module = "Elixir.IgniterJs.Native.Parsers.Javascript.Visitor.ASTNodesInfo"]
-pub struct ASTNodesInfo {
+#[module = "IgniterJs.Native.Parsers.Javascript.ASTStatistics"]
+pub struct ASTStatistics {
     functions: usize,
     classes: usize,
     debuggers: usize,
@@ -25,23 +40,35 @@ pub struct ASTNodesInfo {
     throws: usize,
 }
 
-pub fn source_visitor<'a>(
-    file_content: &str,
-    allocator: &Allocator,
-) -> Result<ASTNodesInfo, String> {
+/// Parses the given JavaScript source code and collects statistics about the AST nodes.
+///
+/// # Arguments
+/// - `file_content`: A string slice containing the JavaScript source code.
+/// - `allocator`: A reference to the allocator used for AST node allocation.
+///
+/// # Returns
+/// A result containing `ASTStatistics` with statistics about the parsed source code or an error message if parsing fails.
+///
+/// # Example
+/// ```rust
+/// let allocator = Allocator::default();
+/// let file_content = "function foo() { console.log('Hello'); }";
+/// let result = source_visitor(file_content, &allocator);
+/// assert!(result.is_ok());
+/// ```
+pub fn source_visitor(file_content: &str, allocator: &Allocator) -> Result<ASTStatistics, String> {
     let parsed = source_to_ast(file_content, allocator)?;
 
     if let Some(errors) = parsed.errors.first() {
         return Err(format!("Failed to parse source: {:?}", errors));
     }
 
-    let mut ast_pass = ASTNodesInfo::default();
+    let mut ast_pass = ASTStatistics::default();
     ast_pass.visit_program(&parsed.program);
-    println!("{ast_pass:?}");
     Ok(ast_pass)
 }
 
-impl<'a> Visit<'a> for ASTNodesInfo {
+impl<'a> Visit<'a> for ASTStatistics {
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         self.functions += 1;
         walk::walk_function(self, func, flags);
@@ -101,6 +128,13 @@ mod tests {
                 debugger;
             }
         "#;
-        assert!(source_visitor(file_content, &allocator).is_ok());
+        let parsed = source_visitor(file_content, &allocator).unwrap();
+        println!("{:#?}", parsed);
+        assert_eq!(parsed.functions, 2);
+        assert_eq!(parsed.classes, 1);
+        assert_eq!(parsed.debuggers, 2);
+        assert_eq!(parsed.imports, 2);
+        assert_eq!(parsed.trys, 0);
+        assert_eq!(parsed.throws, 0);
     }
 }

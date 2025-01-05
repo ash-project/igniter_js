@@ -40,5 +40,7 @@ defmodule IgniterJs.Native do
 
   def remove_objects_of_hooks_from_ast_nif(_file_content, _object_names), do: error()
 
+  def statistics_from_ast_nif(_file_content), do: error()
+
   defp error, do: :erlang.nif_error(:nif_not_loaded)
 end

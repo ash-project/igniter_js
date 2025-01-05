@@ -43,12 +43,12 @@ use rustler::{Encoder, Env, NifResult, Term};
 /// This function is useful for building consistent response formats
 /// when integrating Rust code with Elixir applications.
 
-pub fn encode_response<'a, T>(
-    env: Env<'a>,
+pub fn encode_response<T>(
+    env: Env<'_>,
     status: rustler::types::atom::Atom,
     source: rustler::types::atom::Atom,
     message: T,
-) -> NifResult<Term<'a>>
+) -> NifResult<Term<'_>>
 where
     T: Encoder,
 {

@@ -184,4 +184,38 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       type
     )
   end
+
+  @doc """
+  Retrieve statistical information about the JavaScript source code, such as the number of
+  functions, classes, debugger statements, imports, try-catch blocks, and throw statements.
+
+  This function accepts either the content of the JavaScript file or the path to the file,
+  and returns a tuple with the status, function atom, and the extracted data as a map.
+
+  ## Examples
+
+  ```elixir
+  alias IgniterJs.Parsers.Javascript.Parser
+
+  # Analyze a JavaScript source file by providing its content
+  Parser.statistics(js_content)
+
+  # Analyze a JavaScript source file by providing its file path
+  Parser.statistics("/path/to/file.js", :path)
+  ```
+  """
+  def statistics(file_path_or_content, type \\ :content) do
+    {status, fn_atom, {_, data}} =
+      call_nif_fn(
+        file_path_or_content,
+        __ENV__.function,
+        fn file_content ->
+          Native.statistics_from_ast_nif(file_content)
+        end,
+        type
+      )
+
+    converted = if is_map(data), do: Map.drop(data, [:__struct__]), else: data
+    {status, fn_atom, converted}
+  end
 end

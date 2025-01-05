@@ -1,6 +1,7 @@
 use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
+use crate::parsers::javascript::ast_statistics::{source_visitor, ASTStatisticsResultType};
 use oxc::allocator::Allocator;
 use rustler::{Env, NifResult, Term};
 
@@ -133,6 +134,22 @@ fn remove_objects_of_hooks_from_ast_nif(
             Ok(updated_code) => (atoms::ok(), updated_code),
             Err(error_msg) => (atoms::error(), error_msg),
         };
+
+    encode_response(env, status, fn_atom, result)
+}
+
+#[rustler::nif]
+fn statistics_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
+    let allocator = Allocator::default(); // Create an OXC allocator
+    let fn_atom = atoms::statistics_from_ast_nif();
+
+    let (status, result) = match source_visitor(&file_content, &allocator) {
+        Ok(updated_code) => (
+            atoms::ok(),
+            ASTStatisticsResultType::Statistics(updated_code),
+        ),
+        Err(error_msg) => (atoms::error(), ASTStatisticsResultType::Error(error_msg)),
+    };
 
     encode_response(env, status, fn_atom, result)
 }

@@ -13,5 +13,6 @@ rustler::atoms! {
     find_live_socket_node_from_ast,
     extend_hook_object_to_ast_nif,
     remove_objects_of_hooks_from_ast_nif,
+    statistics_from_ast_nif,
     // Resource Atoms
 }

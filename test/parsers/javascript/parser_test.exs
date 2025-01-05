@@ -8,6 +8,8 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
   @invalid_app_without_live_socket_object "test/assets/invalidAppWithoutLiveSockerObject.js"
   @invalid_app_without_hooks_key "test/assets/invalidAppWithoutHooksKey.js"
   @valid_app_with_hooks_objects "test/assets/validAppWithSomeHooksObjects.js"
+  @invalid_error_import "test/assets/errorImport.js"
+  @valid_ast_statistics "test/assets/validASTStatistics.js"
 
   test "User requested module imported? :: module_imported" do
     {:ok, :module_imported, true} =
@@ -260,5 +262,16 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
              )
 
     ^considerd_output = assert output
+  end
+
+  test "Get statistics from the given file or content :: statistics" do
+    {:error, :statistics, _statistics} = assert Parser.statistics(@invalid_error_import, :path)
+    {:ok, :statistics, statistics} = assert Parser.statistics(@valid_ast_statistics, :path)
+     2 = assert statistics.functions
+     1 = assert statistics.classes
+     2 = assert statistics.debuggers
+     2 = assert statistics.imports
+     0 = assert statistics.trys
+     0 = assert statistics.throws
   end
 end

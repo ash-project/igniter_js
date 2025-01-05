@@ -71,7 +71,7 @@ pub fn source_to_ast<'a>(
 /// # Returns
 /// A `Result` containing `true` if the module is imported, `false` otherwise,
 /// or an error message if parsing fails.
-pub fn is_module_imported_from_ast<'a>(
+pub fn is_module_imported_from_ast(
     file_content: &str,
     module_name: &str,
     allocator: &Allocator,
@@ -107,7 +107,7 @@ pub fn is_module_imported_from_ast<'a>(
 /// # Behavior
 /// - Ensures duplicate imports are skipped.
 /// - Inserts new import statements after existing ones or at the top if none exist.
-pub fn insert_import_to_ast<'a>(
+pub fn insert_import_to_ast(
     file_content: &str,
     import_lines: &str,
     allocator: &Allocator,
@@ -174,10 +174,10 @@ pub fn insert_import_to_ast<'a>(
 /// # Behavior
 /// - Retains all other import statements and code structure.
 /// - Removes only the specified modules from the import declarations.
-pub fn remove_import_from_ast<'a>(
+pub fn remove_import_from_ast(
     file_content: &str,
     modules: impl IntoIterator<Item = impl AsRef<str>>,
-    allocator: &'a Allocator,
+    allocator: &Allocator,
 ) -> Result<String, String> {
     // Parse the source file into AST
     let mut parsed = source_to_ast(file_content, allocator)?;
@@ -297,7 +297,7 @@ pub fn extend_hook_object_to_ast<'a>(
 
         if let Expression::ObjectExpression(obj_expr) = hooks_property {
             for name in names {
-                let new_property = create_and_import_object_into_hook(name.as_ref(), allocator);
+                let new_property = create_and_import_object_into_hook(name, allocator);
                 obj_expr.properties.push(new_property)
             }
         }
