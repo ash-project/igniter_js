@@ -3,7 +3,9 @@ use crate::parsers::javascript::ast::source_to_ast;
 use oxc::{
     allocator::Allocator,
     ast::{
-        ast::{Class, Function, TSImportType},
+        ast::{
+            Class, DebuggerStatement, Function, ImportDeclaration, ThrowStatement, TryStatement,
+        },
         visit::walk,
         Visit,
     },
@@ -13,26 +15,33 @@ use oxc::{
 use rustler::NifStruct;
 
 #[derive(Debug, Default, NifStruct)]
-#[module = "Elixir.IgniterJs.Native.Parsers.Javascript.Visitor.CountASTNodes"]
-pub struct CountASTNodes {
+#[module = "Elixir.IgniterJs.Native.Parsers.Javascript.Visitor.ASTNodesInfo"]
+pub struct ASTNodesInfo {
     functions: usize,
     classes: usize,
-    ts_import_types: usize,
+    debuggers: usize,
+    imports: usize,
+    trys: usize,
+    throws: usize,
 }
 
 pub fn source_visitor<'a>(
     file_content: &str,
     allocator: &Allocator,
-) -> Result<CountASTNodes, Box<dyn std::error::Error>> {
+) -> Result<ASTNodesInfo, String> {
     let parsed = source_to_ast(file_content, allocator)?;
 
-    let mut ast_pass = CountASTNodes::default();
+    if let Some(errors) = parsed.errors.first() {
+        return Err(format!("Failed to parse source: {:?}", errors));
+    }
+
+    let mut ast_pass = ASTNodesInfo::default();
     ast_pass.visit_program(&parsed.program);
     println!("{ast_pass:?}");
     Ok(ast_pass)
 }
 
-impl<'a> Visit<'a> for CountASTNodes {
+impl<'a> Visit<'a> for ASTNodesInfo {
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         self.functions += 1;
         walk::walk_function(self, func, flags);
@@ -43,9 +52,24 @@ impl<'a> Visit<'a> for CountASTNodes {
         walk::walk_class(self, class);
     }
 
-    fn visit_ts_import_type(&mut self, ty: &TSImportType<'a>) {
-        self.ts_import_types += 1;
-        walk::walk_ts_import_type(self, ty);
+    fn visit_debugger_statement(&mut self, it: &DebuggerStatement) {
+        self.debuggers += 1;
+        walk::walk_debugger_statement(self, it);
+    }
+
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+        self.imports += 1;
+        walk::walk_import_declaration(self, it);
+    }
+
+    fn visit_try_statement(&mut self, it: &TryStatement<'a>) {
+        self.trys += 1;
+        walk::walk_try_statement(self, it);
+    }
+
+    fn visit_throw_statement(&mut self, it: &ThrowStatement<'a>) {
+        self.throws += 1;
+        walk::walk_throw_statement(self, it);
     }
 }
 
@@ -64,13 +88,17 @@ mod tests {
         let allocator = create_allocator();
         let file_content = r#"
             import { foo } from 'bar';
+            import * as jar from 'jar';
+            console.log('Start JS file');
             class Foo {
                 constructor() {
+                    debugger;
                     console.log('Hello');
                 }
             }
             function bar() {
                 console.log('World');
+                debugger;
             }
         "#;
         assert!(source_visitor(file_content, &allocator).is_ok());
