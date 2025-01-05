@@ -23,11 +23,11 @@ use oxc::{
     allocator::{Allocator, Box as OXCBox, Vec as OXCVec},
     ast::ast::{
         Argument, Expression, IdentifierName, IdentifierReference, NewExpression, ObjectExpression,
-        ObjectProperty, ObjectPropertyKind, Program, PropertyKey, PropertyKind, Statement,
+        ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, Statement,
         VariableDeclarator,
     },
     codegen::Codegen,
-    parser::{ParseOptions, Parser},
+    parser::{ParseOptions, Parser, ParserReturn},
     span::{Atom, SourceType, Span},
 };
 
@@ -47,7 +47,7 @@ use std::cell::Cell;
 pub fn source_to_ast<'a>(
     file_content: &'a str,
     allocator: &'a Allocator,
-) -> Result<Program<'a>, String> {
+) -> Result<ParserReturn<'a>, String> {
     let source_type = SourceType::default();
     let parser = Parser::new(allocator, file_content, source_type).with_options(ParseOptions {
         parse_regular_expression: true,
@@ -55,7 +55,7 @@ pub fn source_to_ast<'a>(
     });
 
     let parse_result = parser.parse();
-    Ok(parse_result.program)
+    Ok(parse_result)
 }
 
 /// Checks if a specific module is imported in the JavaScript source code.
@@ -76,9 +76,9 @@ pub fn is_module_imported_from_ast<'a>(
     module_name: &str,
     allocator: &Allocator,
 ) -> Result<bool, String> {
-    let program = source_to_ast(file_content, allocator)?;
+    let parsed = source_to_ast(file_content, allocator)?;
 
-    for node in program.body {
+    for node in parsed.program.body {
         if let Statement::ImportDeclaration(import_decl) = node {
             if import_decl.source.value == module_name {
                 return Ok(true);
@@ -112,29 +112,22 @@ pub fn insert_import_to_ast<'a>(
     import_lines: &str,
     allocator: &Allocator,
 ) -> Result<String, String> {
-    let mut program = source_to_ast(file_content, allocator)?;
+    let mut parsed = source_to_ast(file_content, allocator)?;
 
     for import_line in import_lines.lines() {
-        let import_source_type = SourceType::default();
-        let parser =
-            Parser::new(allocator, import_line, import_source_type).with_options(ParseOptions {
-                parse_regular_expression: true,
-                ..ParseOptions::default()
-            });
-
-        let parsed_result = parser.parse();
-        if let Some(errors) = parsed_result.errors.first() {
+        let new_parsed = source_to_ast(import_line, allocator)?;
+        if let Some(errors) = new_parsed.errors.first() {
             return Err(format!("Failed to parse import line: {:?}", errors));
         }
 
-        let new_import = parsed_result
+        let new_import = new_parsed
             .program
             .body
             .into_iter()
             .find(|node| matches!(node, Statement::ImportDeclaration(_)))
             .ok_or_else(|| "No import declaration found in parsed import line".to_string())?;
 
-        if program.body.iter().any(|node| {
+        if parsed.program.body.iter().any(|node| {
             matches!(
                 (node, &new_import),
                 (
@@ -146,18 +139,19 @@ pub fn insert_import_to_ast<'a>(
             continue; // Skip duplicate imports
         }
 
-        let position = program
+        let position = parsed
+            .program
             .body
             .iter()
             .rposition(|node| matches!(node, Statement::ImportDeclaration(_)))
             .map(|index| index + 1)
             .unwrap_or(0);
 
-        program.body.insert(position, new_import);
+        parsed.program.body.insert(position, new_import);
     }
 
     let codegen = Codegen::new();
-    let generated_code = codegen.build(&program).code;
+    let generated_code = codegen.build(&parsed.program).code;
 
     Ok(generated_code)
 }
@@ -186,7 +180,7 @@ pub fn remove_import_from_ast<'a>(
     allocator: &'a Allocator,
 ) -> Result<String, String> {
     // Parse the source file into AST
-    let mut program = source_to_ast(file_content, allocator)?;
+    let mut parsed = source_to_ast(file_content, allocator)?;
 
     // Find and remove the specified import declaration
     let modules: Vec<String> = modules
@@ -194,7 +188,7 @@ pub fn remove_import_from_ast<'a>(
         .map(|n| n.as_ref().to_string())
         .collect();
 
-    program.body.retain(|node| {
+    parsed.program.body.retain(|node| {
         if let Statement::ImportDeclaration(import_decl) = node {
             let source_value = import_decl.source.value.to_string();
             !modules.contains(&source_value)
@@ -204,7 +198,7 @@ pub fn remove_import_from_ast<'a>(
     });
 
     let codegen = Codegen::new();
-    let generated_code = codegen.build(&program).code;
+    let generated_code = codegen.build(&parsed.program).code;
     Ok(generated_code)
 }
 
@@ -223,8 +217,8 @@ pub fn remove_import_from_ast<'a>(
 /// # Behavior
 /// - Iterates through all `VariableDeclaration` nodes in the AST to check
 ///   for a variable with the identifier `liveSocket`.
-pub fn find_live_socket_node_from_ast<'a>(program: &'a Program<'a>) -> Result<bool, bool> {
-    if program.body.iter().any(|node| {
+pub fn find_live_socket_node_from_ast<'a>(parsed: &'a ParserReturn<'a>) -> Result<bool, bool> {
+    if parsed.program.body.iter().any(|node| {
         if let Statement::VariableDeclaration(var_decl) = node {
             var_decl.declarations.iter().any(|decl| {
                 decl.id
@@ -284,13 +278,13 @@ pub fn extend_hook_object_to_ast<'a>(
     names: impl IntoIterator<Item = &'a str>,
     allocator: &Allocator,
 ) -> Result<String, String> {
-    let mut program = source_to_ast(file_content, allocator)?;
+    let mut parsed = source_to_ast(file_content, allocator)?;
 
-    if find_live_socket_node_from_ast(&program).is_err() {
+    if find_live_socket_node_from_ast(&parsed).is_err() {
         return Err("liveSocket not found.".to_string());
     }
 
-    let maybe_properties = get_properties(&mut program.body);
+    let maybe_properties = get_properties(&mut parsed.program.body);
     if let Some(properties) = maybe_properties {
         let hooks_property = match find_hooks_property(properties) {
             Some(prop) => prop,
@@ -312,7 +306,7 @@ pub fn extend_hook_object_to_ast<'a>(
     }
 
     let codegen = Codegen::new();
-    let generated_code = codegen.build(&program).code;
+    let generated_code = codegen.build(&parsed.program).code;
     Ok(generated_code)
 }
 
@@ -344,13 +338,13 @@ pub fn remove_objects_of_hooks_from_ast(
     object_names: impl IntoIterator<Item = impl AsRef<str>>,
     allocator: &Allocator,
 ) -> Result<String, String> {
-    let mut program = source_to_ast(file_content, allocator)?;
+    let mut parsed = source_to_ast(file_content, allocator)?;
 
-    if find_live_socket_node_from_ast(&program).is_err() {
+    if find_live_socket_node_from_ast(&parsed).is_err() {
         return Err("liveSocket not found.".to_string());
     }
 
-    let maybe_properties = get_properties(&mut program.body);
+    let maybe_properties = get_properties(&mut parsed.program.body);
     if let Some(properties) = maybe_properties {
         let hooks_property = match find_hooks_property(properties) {
             Some(prop) => prop,
@@ -381,7 +375,7 @@ pub fn remove_objects_of_hooks_from_ast(
     }
 
     let codegen = Codegen::new();
-    let generated_code = codegen.build(&program).code;
+    let generated_code = codegen.build(&parsed.program).code;
     Ok(generated_code)
 }
 
@@ -526,8 +520,8 @@ mod tests {
 
         match source_to_ast(js_content, allocator) {
             Ok(ast) => {
-                println!("{:#?}", ast.body);
-                assert!(!ast.body.is_empty(), "AST body should not be empty");
+                println!("{:#?}", ast.program.body);
+                assert!(!ast.program.body.is_empty(), "AST body should not be empty");
             }
             Err(e) => panic!("Error while parsing AST: {}", e),
         }
