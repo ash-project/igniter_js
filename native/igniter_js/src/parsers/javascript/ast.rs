@@ -26,7 +26,7 @@ use oxc::{
         ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, Statement,
         VariableDeclarator,
     },
-    codegen::Codegen,
+    codegen::{Codegen, CodegenOptions},
     parser::{ParseOptions, Parser, ParserReturn},
     span::{Atom, SourceType, Span},
 };
@@ -150,10 +150,7 @@ pub fn insert_import_to_ast(
         parsed.program.body.insert(position, new_import);
     }
 
-    let codegen = Codegen::new();
-    let generated_code = codegen.build(&parsed.program).code;
-
-    Ok(generated_code)
+    Ok(codegen(&parsed, false))
 }
 
 /// Removes specified import statements from JavaScript source code.
@@ -197,9 +194,7 @@ pub fn remove_import_from_ast(
         }
     });
 
-    let codegen = Codegen::new();
-    let generated_code = codegen.build(&parsed.program).code;
-    Ok(generated_code)
+    Ok(codegen(&parsed, false))
 }
 
 /// Checks if a `liveSocket` variable is declared in the JavaScript AST.
@@ -305,9 +300,7 @@ pub fn extend_hook_object_to_ast<'a>(
         return Err("properties not found in the AST.".to_string());
     }
 
-    let codegen = Codegen::new();
-    let generated_code = codegen.build(&parsed.program).code;
-    Ok(generated_code)
+    Ok(codegen(&parsed, false))
 }
 
 /// Removes specified objects from the `hooks` object in the JavaScript AST.
@@ -374,9 +367,17 @@ pub fn remove_objects_of_hooks_from_ast(
         return Err("properties not found in the AST.".to_string());
     }
 
-    let codegen = Codegen::new();
-    let generated_code = codegen.build(&parsed.program).code;
-    Ok(generated_code)
+    Ok(codegen(&parsed, false))
+}
+
+fn codegen(ret: &ParserReturn<'_>, minify: bool) -> String {
+    Codegen::new()
+        .with_options(CodegenOptions {
+            minify,
+            ..CodegenOptions::default()
+        })
+        .build(&ret.program)
+        .code
 }
 
 fn get_properties<'short, 'long>(
@@ -561,7 +562,9 @@ mod tests {
     #[test]
     fn test_insert_duplicate_import() {
         let js_content = r#"
+            // Change heading:
             import { foo } from "module-name";
+            // Change heading:
             console.log("Duplicate import test");
         "#;
 
