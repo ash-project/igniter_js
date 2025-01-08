@@ -51,6 +51,7 @@ pub fn source_to_ast<'a>(
     let source_type = SourceType::default();
     let parser = Parser::new(allocator, file_content, source_type).with_options(ParseOptions {
         parse_regular_expression: true,
+        allow_return_outside_function: true,
         ..ParseOptions::default()
     });
 
@@ -292,8 +293,21 @@ pub fn extend_hook_object_to_ast<'a>(
 
         if let Expression::ObjectExpression(obj_expr) = hooks_property {
             for name in names {
-                let new_property = create_and_import_object_into_hook(name, allocator);
-                obj_expr.properties.push(new_property)
+                if !obj_expr.properties.iter().any(|x| match x {
+                    ObjectPropertyKind::SpreadProperty(spread) => spread
+                        .argument
+                        .get_identifier_reference()
+                        .map(|ref_id| ref_id.name == name)
+                        .unwrap_or(false),
+                    ObjectPropertyKind::ObjectProperty(normal) => normal
+                        .value
+                        .get_identifier_reference()
+                        .map(|ref_id| ref_id.name == name)
+                        .unwrap_or(false),
+                }) {
+                    let new_property = create_and_import_object_into_hook(name, allocator);
+                    obj_expr.properties.push(new_property);
+                }
             }
         }
     } else {
@@ -757,7 +771,7 @@ mod tests {
         "#;
 
         let allocator = create_allocator();
-        let object_names = vec!["OXCTestHook", "MishkaHooks"];
+        let object_names = vec!["OXCTestHook", "MishkaHooks", "MishkaHooks", "OXCTestHook"];
         match extend_hook_object_to_ast(js_content, object_names, allocator) {
             Ok(ast) => {
                 println!("Hook object extended successfully. ==> {}", ast);
