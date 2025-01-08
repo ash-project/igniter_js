@@ -219,6 +219,35 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
     {status, fn_atom, converted}
   end
 
+  @doc """
+    Extend a variable of object type in the given file or content by adding additional objects to it,
+    based on their names.
+
+    This function ensures that duplicate entries are not added during the process.
+
+    This function accepts:
+    - The content or path of the JavaScript file.
+    - The name of the variable to be extended.
+    - A single object name or a list of object names to be added.
+    - The type indicating whether it's content (`:content`) or a path (`:path`).
+
+    It returns a tuple with the status, function atom, and the updated content or an error message
+    if the variable could not be found or modified.
+
+    ## Examples
+
+    ```elixir
+    alias IgniterJs.Parsers.Javascript.Parser
+
+    objects_names = ["OXCTestHook", "MishkaHooks", "MishkaHooks", "OXCTestHook"]
+
+    Parser.extend_var_object_by_object_names(js_content, "Components", "TestHook")
+    Parser.extend_var_object_by_object_names("/path/to/file.js", "Components", objects_names, :path)
+
+    {:error, :extend_var_object_by_object_names, _output} =
+      Parser.extend_var_object_by_object_names("None", "Components", objects_names)
+    ```
+  """
   def extend_var_object_by_object_names(file_path_or_content, var, object_names, type \\ :content)
 
   def extend_var_object_by_object_names(file_path_or_content, var, object_name, type)
