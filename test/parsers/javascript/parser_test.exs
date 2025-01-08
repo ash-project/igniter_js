@@ -10,6 +10,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
   @valid_app_with_hooks_objects "test/assets/validAppWithSomeHooksObjects.js"
   @invalid_error_import "test/assets/errorImport.js"
   @valid_ast_statistics "test/assets/validASTStatistics.js"
+  @valid_extend_var_object "test/assets/extendVarObject.js"
 
   test "User requested module imported? :: module_imported" do
     {:ok, :module_imported, true} =
@@ -273,5 +274,34 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     2 = assert statistics.imports
     0 = assert statistics.trys
     0 = assert statistics.throws
+  end
+
+  test "Extend some objects inside a var object :: extend_var_object_by_object_names" do
+    objects_names = ["OXCTestHook", "MishkaHooks", "MishkaHooks", "OXCTestHook"]
+
+    considerd_output =
+      "const Components = {\n\tOXCTestHook,\n\tMishkaHooks\n};\nexport default Components;\n"
+
+    # It prevents duplicate objects
+    {:ok, :extend_var_object_by_object_names, output} =
+      assert Parser.extend_var_object_by_object_names(
+               @valid_extend_var_object,
+               "Components",
+               objects_names,
+               :path
+             )
+
+    ^considerd_output = assert output
+
+    {:error, :extend_var_object_by_object_names, _output} =
+      assert Parser.extend_var_object_by_object_names("None", "Components", objects_names)
+
+    {:ok, :extend_var_object_by_object_names, _output} =
+      assert Parser.extend_var_object_by_object_names(
+               @valid_extend_var_object,
+               "Components",
+               "TestHook",
+               :path
+             )
   end
 end

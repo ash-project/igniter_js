@@ -218,4 +218,22 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
     converted = if is_map(data), do: Map.drop(data, [:__struct__]), else: data
     {status, fn_atom, converted}
   end
+
+  def extend_var_object_by_object_names(file_path_or_content, var, object_names, type \\ :content)
+
+  def extend_var_object_by_object_names(file_path_or_content, var, object_name, type)
+      when is_binary(object_name) do
+    extend_var_object_by_object_names(file_path_or_content, var, [object_name], type)
+  end
+
+  def extend_var_object_by_object_names(file_path_or_content, var, object_names, type) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        Native.extend_var_object_property_by_names_to_ast_nif(file_content, var, object_names)
+      end,
+      type
+    )
+  end
 end

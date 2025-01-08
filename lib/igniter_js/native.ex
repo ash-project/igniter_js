@@ -42,5 +42,8 @@ defmodule IgniterJs.Native do
 
   def statistics_from_ast_nif(_file_content), do: error()
 
+  def extend_var_object_property_by_names_to_ast_nif(_file_content, _var_name, _object_names),
+    do: error()
+
   defp error, do: :erlang.nif_error(:nif_not_loaded)
 end
