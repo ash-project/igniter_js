@@ -478,7 +478,7 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
     match result {
         Some(Ok(_)) => Ok(codegen(&parsed, false)),
         Some(Err(e)) => Err(e),
-        None => Err("Variable not found in javascript body".to_string()),
+        _ => Err("Variable not found in javascript body or js file is invalid".to_string()),
     }
 }
 

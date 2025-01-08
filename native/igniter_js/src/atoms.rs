@@ -14,5 +14,6 @@ rustler::atoms! {
     extend_hook_object_to_ast_nif,
     remove_objects_of_hooks_from_ast_nif,
     statistics_from_ast_nif,
+    extend_var_object_property_by_names_to_ast_nif,
     // Resource Atoms
 }

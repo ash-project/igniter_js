@@ -153,3 +153,30 @@ fn statistics_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
 
     encode_response(env, status, fn_atom, result)
 }
+
+#[rustler::nif]
+pub fn extend_var_object_property_by_names_to_ast_nif(
+    env: Env,
+    file_content: String,
+    var_name: String,
+    object_names: Vec<String>,
+) -> NifResult<Term> {
+    let allocator = Allocator::default(); // Create an OXC allocator
+    let names_iter = object_names.iter().map(|s| s.as_str());
+    let (status, result) = match extend_var_object_property_by_names_to_ast(
+        &file_content,
+        &var_name,
+        names_iter,
+        &allocator,
+    ) {
+        Ok(updated_code) => (atoms::ok(), updated_code),
+        Err(error_msg) => (atoms::error(), error_msg),
+    };
+
+    encode_response(
+        env,
+        status,
+        atoms::extend_var_object_property_by_names_to_ast_nif(),
+        result,
+    )
+}
