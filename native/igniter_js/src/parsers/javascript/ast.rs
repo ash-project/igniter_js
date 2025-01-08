@@ -430,7 +430,7 @@ pub fn remove_objects_of_hooks_from_ast(
 ///   );
 ///   assert!(result.is_err());
 ///   ```
-
+// Ref: https://users.rust-lang.org/t/123707
 pub fn extend_var_object_property_by_names_to_ast<'a>(
     file_content: &str,
     var_name: &str,
@@ -478,7 +478,7 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
     match result {
         Some(Ok(_)) => Ok(codegen(&parsed, false)),
         Some(Err(e)) => Err(e),
-        _ => Err("Variable not found in javascript body or js file is invalid".to_string()),
+        _ => Err("Variable not found in javascript body or javascript file is invalid".to_string()),
     }
 }
 
