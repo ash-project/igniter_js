@@ -52,6 +52,36 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
              File.read!(@invalid_app_without_live_socket),
              "none_live_view"
            )
+
+    code = """
+    import "phoenix_html";
+    import { Socket, SocketV1 } from "phoenix";
+    import { TS } from "tsobject";
+
+    // This is first test we need to have
+    console.log("We are here");
+
+    const min = ()          => {return "Shahryar" + "Tavakkoli"};
+    """
+
+    imports = """
+    import "phoenix_html";
+    import { Socket, SocketV1 } from "phoenix";
+    import { TS } from "tsobject";
+    """
+
+    assert Parser.module_imported?(code, imports)
+
+    imports = """
+    import "phoenix_html";
+    import { Socket, SocketV1 } from "phoenix";
+    import { TS1 } from "tsobject1";
+    import { TS } from "tsobject";
+    """
+
+    assert !Parser.module_imported?(code, imports)
+
+    assert !Parser.module_imported?("", "")
   end
 
   test "Insert some js lines for import modules :: insert_imports" do
@@ -163,8 +193,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        something\n    }\n});\n"
 
-    # "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken },\n\thooks: { something }\n});\n"
-
     {:ok, :extend_hook_object, output} =
       assert Parser.extend_hook_object(@invalid_app_without_hooks_key, "something", :path)
 
@@ -183,8 +211,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        another,\n        something\n    }\n});\n"
 
-    # "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken },\n\thooks: {\n\t\tsomething,\n\t\tanother\n\t}\n});\n"
-
     ^considerd_output = assert output
 
     {:error, :extend_hook_object, _msg} =
@@ -195,8 +221,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     considerd_output =
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        something\n    }\n});\n"
-
-    # "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken },\n\thooks: { something }\n});\n"
 
     {:ok, :extend_hook_object, output} =
       assert Parser.extend_hook_object(File.read!(@invalid_app_without_hooks_key), "something")
@@ -212,16 +236,12 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        another,\n        something\n    }\n});\n"
 
-    # "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken },\n\thooks: {\n\t\tsomething,\n\t\tanother\n\t}\n});\n"
-
     ^considerd_output = assert output
   end
 
   test "Remove objects of hooks key inside LiveSocket:: remove_objects_from_hooks" do
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks,\n        CopyMixInstallationHook,\n        OXCExampleObjectHook\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
-
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: {\n\t\t...Hooks,\n\t\tCopyMixInstallationHook,\n\t\tOXCExampleObjectHook\n\t},\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
 
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
@@ -235,8 +255,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks,\n        CopyMixInstallationHook\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
 
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: {\n\t\t...Hooks,\n\t\tCopyMixInstallationHook\n\t},\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
-
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
                @valid_app_with_hooks_objects,
@@ -248,8 +266,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
-
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: { ...Hooks },\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
 
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
@@ -263,8 +279,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks,\n        CopyMixInstallationHook,\n        OXCExampleObjectHook\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
 
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: {\n\t\t...Hooks,\n\t\tCopyMixInstallationHook,\n\t\tOXCExampleObjectHook\n\t},\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
-
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
                File.read!(@valid_app_with_hooks_objects),
@@ -276,8 +290,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks,\n        CopyMixInstallationHook\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
 
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: {\n\t\t...Hooks,\n\t\tCopyMixInstallationHook\n\t},\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
-
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
                File.read!(@valid_app_with_hooks_objects),
@@ -288,8 +300,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     considerd_output =
       "let liveSocket = new LiveSocket(\"/live\", Socket, {\n    hooks: {\n        ...Hooks\n    },\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    }\n});\n"
-
-    # "let liveSocket = new LiveSocket(\"/live\", Socket, {\n\thooks: { ...Hooks },\n\tlongPollFallbackMs: 2500,\n\tparams: { _csrf_token: csrfToken }\n});\n"
 
     {:ok, :remove_objects_from_hooks, output} =
       assert Parser.remove_objects_from_hooks(
@@ -317,9 +327,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     objects_names = ["OXCTestHook", "MishkaHooks", "MishkaHooks", "OXCTestHook"]
 
     considerd_output =
-      "const Components = {\n    OXCTestHook,\n    MishkaHooks,\n    MishkaHooks,\n    OXCTestHook\n};\nexport default Components;\n"
-
-    # "const Components = {\n\tOXCTestHook,\n\tMishkaHooks\n};\nexport default Components;\n"
+      "const Components = {\n    MishkaHooks,\n    OXCTestHook\n};\nexport default Components;\n"
 
     # It prevents duplicate objects
     {:ok, :extend_var_object_by_object_names, output} =

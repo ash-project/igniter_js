@@ -124,3 +124,7 @@ fn specifier_equals(new_spec: &ImportSpecifier, existing_spec: &ImportSpecifier)
         _ => false,
     }
 }
+
+pub fn replace_four_spaces_with_tab(input: &str) -> String {
+    input.replace("    ", "\t")
+}

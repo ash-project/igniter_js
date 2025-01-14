@@ -4,7 +4,6 @@ use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
 use crate::parsers::javascript::phoenix::*;
-
 use rustler::{Env, NifResult, NifStruct, NifTaggedEnum, Term};
 
 #[rustler::nif]
@@ -137,9 +136,12 @@ pub fn extend_var_object_property_by_names_to_ast_nif(
     var_name: String,
     object_names: Vec<String>,
 ) -> NifResult<Term> {
-    let names_iter = object_names.iter().map(|s| s.as_str());
+    let unique_names: HashSet<String> = object_names.into_iter().collect();
+    let mut vec_of_strs: Vec<&str> = unique_names.iter().map(|s| s.as_str()).collect();
+    vec_of_strs.sort();
+
     let (status, result) =
-        match extend_var_object_property_by_names_to_ast(&file_content, &var_name, names_iter) {
+        match extend_var_object_property_by_names_to_ast(&file_content, &var_name, vec_of_strs) {
             Ok(updated_code) => (atoms::ok(), updated_code),
             Err(error_msg) => (atoms::error(), error_msg),
         };

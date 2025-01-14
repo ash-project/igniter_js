@@ -57,6 +57,7 @@ impl FindCondition {
 struct ASTVisitImport<'a> {
     code: &'a str,
     duplicate_imports: Vec<String>,
+    none_duplicate_imports: Vec<String>,
     operation: Operation,
 }
 
@@ -65,6 +66,7 @@ impl<'a> Default for ASTVisitImport<'a> {
         Self {
             code: "",
             duplicate_imports: Vec::new(),
+            none_duplicate_imports: Vec::new(),
             operation: Operation::Edit,
         }
     }
@@ -103,11 +105,20 @@ impl VisitMut for ASTVisitImport<'_> {
 
         for import in imports.body {
             if !is_duplicate_import(&import, &module.body) {
-                if matches!(self.operation, Operation::Add) {
+                if matches!(self.operation, Operation::Add | Operation::Read) {
                     let mut last_import_index = None;
                     for (i, item) in module.body.iter().enumerate() {
                         if matches!(item, ModuleItem::ModuleDecl(ModuleDecl::Import(_))) {
                             last_import_index = Some(i);
+                        }
+                    }
+
+                    for imp in import.as_module_decl().iter() {
+                        if let ModuleDecl::Import(import_decl) = imp {
+                            let src_value = import_decl.src.value.to_string();
+                            if !self.none_duplicate_imports.contains(&src_value) {
+                                self.none_duplicate_imports.push(src_value);
+                            }
                         }
                     }
 
@@ -150,10 +161,14 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
 
     let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
 
-    if import_visitor.duplicate_imports.is_empty() {
+    if import_visitor.none_duplicate_imports.is_empty()
+        && import_visitor.duplicate_imports.is_empty()
+    {
         Err(false)
-    } else {
+    } else if import_visitor.none_duplicate_imports.is_empty() {
         Ok(true)
+    } else {
+        Err(false)
     }
 }
 
@@ -339,10 +354,42 @@ impl VisitMut for ObjectExtender {
                             if let Expr::Object(obj_expr) = init.as_mut() {
                                 if matches!(self.operation, Operation::Edit) {
                                     self.find = FindCondition::Found;
+                                    let existing_keys: Vec<String> = obj_expr
+                                        .props
+                                        .iter()
+                                        .filter_map(|prop| match prop {
+                                            PropOrSpread::Prop(prop) => match &**prop {
+                                                Prop::Shorthand(ident) => {
+                                                    Some(ident.sym.to_string())
+                                                }
+                                                Prop::KeyValue(key_value) => match &key_value.key {
+                                                    PropName::Ident(ident) => {
+                                                        Some(ident.sym.to_string())
+                                                    }
+                                                    _ => None,
+                                                },
+                                                _ => None,
+                                            },
+                                            PropOrSpread::Spread(spread) => match &*spread.expr {
+                                                Expr::Ident(ident) => {
+                                                    Some(format!("...{}", ident.sym))
+                                                }
+                                                _ => None,
+                                            },
+                                        })
+                                        .collect();
+
                                     let new_props: Vec<PropOrSpread> = self
                                         .new_properties
                                         .clone()
                                         .into_iter()
+                                        .filter(|prop| {
+                                            if let Prop::Shorthand(ident) = prop {
+                                                !existing_keys.contains(&ident.sym.to_string())
+                                            } else {
+                                                true
+                                            }
+                                        })
                                         .map(|prop| PropOrSpread::Prop(Box::new(prop)))
                                         .collect();
 
@@ -404,6 +451,8 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -423,16 +472,25 @@ mod tests {
                 import "phoenix_html";
                 import { Socket, SocketV1 } from "phoenix";
                 import { TS } from "tsobject";
+            "#;
+        let result = is_module_imported_from_ast(code, import);
+
+        assert!(result.is_ok(), "Expected Ok(true), but got {:?}", result);
+
+        let import = r#"
                 import { NoneRepeated } from "orepeat";
             "#;
         let result = is_module_imported_from_ast(code, import);
         assert!(result.is_err(), "Expected Ok(true), but got {:?}", result);
 
         let import = r#"
+                import "phoenix_html";
                 import { NoneRepeated } from "orepeat";
+                import { TS } from "tsobject";
             "#;
         let result = is_module_imported_from_ast(code, import);
-        assert!(result.is_ok(), "Expected Ok(true), but got {:?}", result);
+
+        assert!(result.is_err(), "Expected Ok(true), but got {:?}", result);
     }
     #[test]
     fn test_insert_import_to_ast() {
@@ -488,6 +546,7 @@ mod tests {
                 import { TS } from "tsobject";
                 import { Socket, SocketV1 } from "phoenix";
                 import { NoneRepeated } from "orepeat";
+                import { NoneRepeated1 } from "orepeat1";
             "#;
         let result = remove_import_from_ast(code, import).expect("Failed to generate code");
 
@@ -527,19 +586,31 @@ mod tests {
     #[test]
     fn test_extend_var_object_property_by_names_to_ast() {
         let code = r#"
-            const Components = {PreOrderd};
+            const Components = {...Hoks, PreOrderd};
 
             // Export the components as default
             export default Components;
             "#;
 
-        let object_names = ["...ExtendedObject", "ObjectOne", "CopyCodeHooks"];
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+        let object_names = [
+            "...ExtendedObject".to_string(),
+            "ObjectOne".to_string(),
+            "PreOrderd".to_string(),
+            "CopyCodeHooks".to_string(),
+            "...Hoks".to_string(),
+            "ObjectOne".to_string(),
+        ];
+        let unique_names: HashSet<String> = object_names.into_iter().collect();
+        let mut vec_of_strs: Vec<&str> = unique_names.iter().map(|s| s.as_str()).collect();
+        vec_of_strs.sort();
+
+        let result =
+            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone());
         assert!(result.is_ok());
         println!("{}", result.unwrap());
 
         let result =
-            extend_var_object_property_by_names_to_ast(code, "NoneComponent", object_names);
+            extend_var_object_property_by_names_to_ast(code, "NoneComponent", vec_of_strs.clone());
         assert!(result.is_err());
 
         let code = r#"
@@ -549,7 +620,8 @@ mod tests {
             export default Components;
             "#;
 
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+        let result =
+            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone());
         assert!(result.is_err());
     }
 
