@@ -13,7 +13,7 @@ use swc_ecma_parser::{lexer::Lexer, Capturing, Parser, StringInput, Syntax};
 
 pub fn parse(
     file_content: &str,
-) -> Result<(Module, SingleThreadedComments, Lrc<SourceMap>), Box<dyn std::error::Error>> {
+) -> Result<(Module, SingleThreadedComments, Lrc<SourceMap>), String> {
     let cm: Lrc<SourceMap> = Default::default();
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
@@ -39,7 +39,13 @@ pub fn parse(
         e.into_diagnostic(&handler).emit();
     }
 
-    let module = parser.parse_module().expect("Failed to parse module");
+    // let module = parser.parse_module().expect("Failed to parse module");
+    let module = match parser.parse_module() {
+        Ok(m) => m,
+        Err(_e) => {
+            return Err("Failed to parse module".to_string());
+        }
+    };
 
     Ok((module, comments, cm))
 }

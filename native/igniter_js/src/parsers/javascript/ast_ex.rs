@@ -2,8 +2,8 @@ use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
 use crate::parsers::javascript::phoenix::*;
-use rustler::Encoder;
-use rustler::{Env, NifResult, Term};
+
+use rustler::{Env, NifResult, NifStruct, NifTaggedEnum, Term};
 
 #[rustler::nif]
 pub fn is_module_imported_from_ast_nif(
@@ -87,25 +87,21 @@ fn remove_objects_of_hooks_from_ast_nif(
     encode_response(env, status, fn_atom, result)
 }
 
-enum Response {
-    Statistics(ASTStatistics),
+#[derive(Debug, NifStruct)]
+#[module = "IgniterJs.Native.Parsers.Javascript.ASTStatisticsResult"]
+pub struct ASTStatisticsResult {
+    pub functions: usize,
+    pub classes: usize,
+    pub debuggers: usize,
+    pub imports: usize,
+    pub trys: usize,
+    pub throws: usize,
+}
+
+#[derive(Debug, NifTaggedEnum)]
+pub enum ASTStatisticsResultType {
+    Statistics(ASTStatisticsResult),
     Error(String),
-}
-
-impl Encoder for Response {
-    fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
-        match self {
-            Response::Statistics(stats) => stats.encode(env),
-            Response::Error(msg) => msg.encode(env),
-        }
-    }
-}
-
-impl Encoder for ASTStatistics {
-    fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
-        let map = (("functions", self.functions), ("classes", self.classes));
-        map.encode(env)
-    }
 }
 
 #[rustler::nif]
@@ -113,8 +109,18 @@ fn statistics_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
     let fn_atom = atoms::statistics_from_ast_nif();
 
     let (status, result) = match statistics_from_ast(&file_content) {
-        Ok(updated_code) => (atoms::ok(), Response::Statistics(updated_code)),
-        Err(error_msg) => (atoms::error(), Response::Error(error_msg)),
+        Ok(updated_code) => (
+            atoms::ok(),
+            ASTStatisticsResultType::Statistics(ASTStatisticsResult {
+                imports: updated_code.imports,
+                classes: updated_code.classes,
+                debuggers: updated_code.debuggers,
+                functions: updated_code.functions,
+                throws: updated_code.throws,
+                trys: updated_code.trys,
+            }),
+        ),
+        Err(error_msg) => (atoms::error(), ASTStatisticsResultType::Error(error_msg)),
     };
 
     encode_response(env, status, fn_atom, result)

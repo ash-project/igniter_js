@@ -69,17 +69,12 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
   Parser.remove_imports(js_content, "SomeModule")
-  Parser.remove_imports(js_content, ["SomeModule", "AnotherModule"], :content)
   Parser.remove_imports("/path/to/file.js", "SomeModule", :path)
   ```
   """
   def remove_imports(file_path_or_content, module, type \\ :content)
 
-  def remove_imports(file_path_or_content, module, type) when is_binary(module) do
-    remove_imports(file_path_or_content, [module], type)
-  end
-
-  def remove_imports(file_path_or_content, modules, type) when is_list(modules) do
+  def remove_imports(file_path_or_content, modules, type) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,

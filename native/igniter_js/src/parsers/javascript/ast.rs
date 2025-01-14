@@ -151,9 +151,9 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
     let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
 
     if import_visitor.duplicate_imports.is_empty() {
-        Ok(true)
-    } else {
         Err(false)
+    } else {
+        Ok(true)
     }
 }
 
@@ -214,7 +214,6 @@ pub fn remove_import_from_ast(file_content: &str, modules: &str) -> Result<Strin
 // ###################################################################################
 // ##################### (▰˘◡˘▰) Work with AST Statistics (▰˘◡˘▰) ####################
 // ###################################################################################
-#[derive(Debug)]
 pub struct ASTStatistics {
     pub functions: usize,
     pub classes: usize,
@@ -222,7 +221,7 @@ pub struct ASTStatistics {
     pub imports: usize,
     pub trys: usize,
     pub throws: usize,
-    operation: Operation,
+    pub operation: Operation,
 }
 
 impl Default for ASTStatistics {
