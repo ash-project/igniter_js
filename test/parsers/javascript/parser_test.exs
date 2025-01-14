@@ -355,4 +355,26 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
                :path
              )
   end
+
+  test "Check existing vars :: exist_var" do
+    code = """
+    import { foo } from "module-name";
+    import bar from "another-module";
+    """
+
+    {:error, :exist_var, false} = assert Parser.exist_var(code, "test_name")
+    assert !Parser.exist_var?(code, "test_name")
+
+    code = """
+    import { foo } from "module-name";
+    import bar from "another-module";
+
+    let mishka_ash = () => {1 + 1}
+
+    let igniterJS = %{stack: ["rust", "elixir", "js"]}
+    """
+
+    assert Parser.exist_var?(code, "igniterJS")
+    {:ok, :exist_var, true} = assert Parser.exist_var(code, "igniterJS")
+  end
 end

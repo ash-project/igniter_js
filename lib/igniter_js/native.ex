@@ -36,6 +36,8 @@ defmodule IgniterJs.Native do
 
   def find_live_socket_node_from_ast_nif(_file_content), do: error()
 
+  def contains_variable_from_ast_nif(_file_content, _variable_name), do: error()
+
   def extend_hook_object_to_ast_nif(_file_content, _names), do: error()
 
   def remove_objects_of_hooks_from_ast_nif(_file_content, _object_names), do: error()

@@ -58,6 +58,22 @@ pub fn find_live_socket_node_from_ast_nif(env: Env, file_content: String) -> Nif
 }
 
 #[rustler::nif]
+pub fn contains_variable_from_ast_nif(
+    env: Env,
+    file_content: String,
+    variable_name: String,
+) -> NifResult<Term> {
+    let fn_atom = atoms::contains_variable_from_ast_nif();
+
+    let (status, result) = match contains_variable_from_ast(&file_content, &variable_name) {
+        Ok(true) => (atoms::ok(), true),
+        _ => (atoms::error(), false),
+    };
+
+    encode_response(env, status, fn_atom, result)
+}
+
+#[rustler::nif]
 pub fn extend_hook_object_to_ast_nif(
     env: Env,
     file_content: String,
