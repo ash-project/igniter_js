@@ -1,6 +1,8 @@
 use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
+use crate::parsers::javascript::phoenix::*;
+use rustler::Encoder;
 use rustler::{Env, NifResult, Term};
 
 #[rustler::nif]
@@ -33,13 +35,8 @@ pub fn insert_import_to_ast_nif(
 }
 
 #[rustler::nif]
-fn remove_import_from_ast_nif(
-    env: Env,
-    file_content: String,
-    modules: Vec<String>,
-) -> NifResult<Term> {
-    let names_iter = modules.iter().map(|s| s.as_str());
-    let (status, result) = match remove_import_from_ast(&file_content, names_iter) {
+fn remove_import_from_ast_nif(env: Env, file_content: String, modules: String) -> NifResult<Term> {
+    let (status, result) = match remove_import_from_ast(&file_content, &modules) {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -49,14 +46,9 @@ fn remove_import_from_ast_nif(
 
 #[rustler::nif]
 pub fn find_live_socket_node_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
-    let ast = source_to_ast(&file_content);
     let fn_atom = atoms::find_live_socket_node_from_ast();
-    if ast.is_err() {
-        let msg = "Invalid JS file.";
-        return encode_response(env, atoms::error(), fn_atom, msg);
-    }
 
-    let (status, result) = match find_live_socket_node_from_ast(&ast.unwrap()) {
+    let (status, result) = match find_live_socket_node_from_ast(&file_content) {
         Ok(true) => (atoms::ok(), true),
         _ => (atoms::error(), false),
     };
@@ -70,8 +62,8 @@ pub fn extend_hook_object_to_ast_nif(
     file_content: String,
     names: Vec<String>,
 ) -> NifResult<Term> {
-    let names_iter = names.iter().map(|s| s.as_str());
-    let (status, result) = match extend_hook_object_to_ast(&file_content, names_iter) {
+    let vec_of_strs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let (status, result) = match extend_hook_object_to_ast(&file_content, vec_of_strs) {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -86,8 +78,8 @@ fn remove_objects_of_hooks_from_ast_nif(
     object_names: Vec<String>,
 ) -> NifResult<Term> {
     let fn_atom = atoms::remove_objects_of_hooks_from_ast_nif();
-    let names_iter = object_names.iter().map(|s| s.as_str());
-    let (status, result) = match remove_objects_of_hooks_from_ast(&file_content, names_iter) {
+    let vec_of_strs: Vec<&str> = object_names.iter().map(|s| s.as_str()).collect();
+    let (status, result) = match remove_objects_of_hooks_from_ast(&file_content, vec_of_strs) {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -95,16 +87,34 @@ fn remove_objects_of_hooks_from_ast_nif(
     encode_response(env, status, fn_atom, result)
 }
 
+enum Response {
+    Statistics(ASTStatistics),
+    Error(String),
+}
+
+impl Encoder for Response {
+    fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
+        match self {
+            Response::Statistics(stats) => stats.encode(env),
+            Response::Error(msg) => msg.encode(env),
+        }
+    }
+}
+
+impl Encoder for ASTStatistics {
+    fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
+        let map = (("functions", self.functions), ("classes", self.classes));
+        map.encode(env)
+    }
+}
+
 #[rustler::nif]
 fn statistics_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
     let fn_atom = atoms::statistics_from_ast_nif();
 
-    let (status, result) = match source_visitor(&file_content) {
-        Ok(updated_code) => (
-            atoms::ok(),
-            ASTStatisticsResultType::Statistics(updated_code),
-        ),
-        Err(error_msg) => (atoms::error(), ASTStatisticsResultType::Error(error_msg)),
+    let (status, result) = match statistics_from_ast(&file_content) {
+        Ok(updated_code) => (atoms::ok(), Response::Statistics(updated_code)),
+        Err(error_msg) => (atoms::error(), Response::Error(error_msg)),
     };
 
     encode_response(env, status, fn_atom, result)

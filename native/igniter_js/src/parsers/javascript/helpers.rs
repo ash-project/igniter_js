@@ -11,8 +11,8 @@ use swc_common::{
 
 use swc_ecma_parser::{lexer::Lexer, Capturing, Parser, StringInput, Syntax};
 
-pub fn parse<'a>(
-    file_content: &'a str,
+pub fn parse(
+    file_content: &str,
 ) -> Result<(Module, SingleThreadedComments, Lrc<SourceMap>), Box<dyn std::error::Error>> {
     let cm: Lrc<SourceMap> = Default::default();
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
@@ -44,11 +44,14 @@ pub fn parse<'a>(
     Ok((module, comments, cm))
 }
 
-pub fn code_gen_from_ast_vist<'a, T>(file_content: &'a str, mut visitor: T) -> String
+pub fn code_gen_from_ast_vist<T>(file_content: &str, mut visitor: T) -> Result<String, String>
 where
     T: VisitMut,
 {
-    let (mut module, comments, cm) = parse(file_content).expect("Failed to parse module");
+    let (mut module, comments, cm) = match parse(file_content) {
+        Ok(result) => result,
+        Err(_) => return Err("Failed to parse JavaScript content".to_string()),
+    };
 
     module.visit_mut_with(&mut visitor);
     let mut buf = vec![];
@@ -60,8 +63,11 @@ where
         wr: JsWriter::new(cm.clone(), "\n", &mut buf, None),
     };
 
-    emitter.emit_module(&module).expect("Failed to emit module");
-    String::from_utf8(buf).expect("Invalid UTF-8")
+    if emitter.emit_module(&module).is_err() {
+        return Err("Failed to emit module".to_string());
+    }
+
+    String::from_utf8(buf).map_err(|_| "Invalid UTF-8".to_string())
 }
 
 pub fn code_gen_from_ast_module(
@@ -78,7 +84,7 @@ pub fn code_gen_from_ast_module(
         wr: JsWriter::new(cm.clone(), "\n", &mut buf, None),
     };
 
-    emitter.emit_module(&module).expect("Failed to emit module");
+    emitter.emit_module(module).expect("Failed to emit module");
     String::from_utf8(buf).expect("Invalid UTF-8")
 }
 

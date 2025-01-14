@@ -11,6 +11,7 @@ use crate::parsers::javascript::helpers::*;
 use swc_common::{SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_visit::{VisitMut, VisitMutWith};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operation {
     Add,
@@ -69,7 +70,7 @@ impl<'a> Default for ASTVisitImport<'a> {
     }
 }
 
-impl<'a> VisitMut for ASTVisitImport<'_> {
+impl VisitMut for ASTVisitImport<'_> {
     fn visit_mut_module_items(&mut self, items: &mut Vec<ModuleItem>) {
         // We are using it to delete imports
         let (imports, _comments, _cm) = parse(self.code).expect("Failed to parse imports");
@@ -116,12 +117,10 @@ impl<'a> VisitMut for ASTVisitImport<'_> {
                         module.body.insert(0, import);
                     }
                 }
-            } else {
-                if matches!(self.operation, Operation::Read) {
-                    if let ModuleItem::ModuleDecl(ModuleDecl::Import(new_import_decl)) = import {
-                        self.duplicate_imports
-                            .push(new_import_decl.src.value.to_string());
-                    }
+            } else if matches!(self.operation, Operation::Read) {
+                if let ModuleItem::ModuleDecl(ModuleDecl::Import(new_import_decl)) = import {
+                    self.duplicate_imports
+                        .push(new_import_decl.src.value.to_string());
                 }
             }
         }
@@ -175,7 +174,7 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
 /// # Behavior
 /// - Ensures duplicate imports are skipped.
 /// - Inserts new import statements after existing ones or at the top if none exist.
-pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> String {
+pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<String, String> {
     let mut import_visitor = ASTVisitImport {
         code: import_lines,
         operation: Operation::Add,
@@ -202,7 +201,7 @@ pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> String {
 /// # Behavior
 /// - Retains all other import statements and code structure.
 /// - Removes only the specified modules from the import declarations.
-pub fn remove_import_from_ast(file_content: &str, modules: &str) -> String {
+pub fn remove_import_from_ast(file_content: &str, modules: &str) -> Result<String, String> {
     let mut import_visitor = ASTVisitImport {
         code: modules,
         operation: Operation::Delete,
@@ -335,7 +334,7 @@ impl VisitMut for ObjectExtender {
         if matches!(self.operation, Operation::Edit) {
             for decl in &mut var_decl.decls {
                 if let Some(ident) = decl.name.as_ident() {
-                    if ident.sym.to_string() == self.target_var_name {
+                    if ident.sym == self.target_var_name {
                         if let Some(init) = &mut decl.init {
                             self.find = FindCondition::FoundError("".to_string());
                             if let Expr::Object(obj_expr) = init.as_mut() {
@@ -379,7 +378,7 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
 
     let result = code_gen_from_ast_vist(file_content, &mut object_extender);
     if object_extender.find == FindCondition::Found {
-        Ok(result)
+        result
     } else {
         Err(object_extender.find.message().to_string())
     }
@@ -455,7 +454,7 @@ mod tests {
                 import { TS } from "tsobject";
                 import { NoneRepeated } from "orepeat";
             "#;
-        let result = insert_import_to_ast(code, import);
+        let result = insert_import_to_ast(code, import).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
@@ -491,7 +490,7 @@ mod tests {
                 import { Socket, SocketV1 } from "phoenix";
                 import { NoneRepeated } from "orepeat";
             "#;
-        let result = remove_import_from_ast(code, import);
+        let result = remove_import_from_ast(code, import).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(!result.contains("import { Socket, SocketV1 } from \"phoenix\";"));

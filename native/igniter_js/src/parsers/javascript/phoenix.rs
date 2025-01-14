@@ -38,7 +38,7 @@ impl<'a> VisitMut for HookExtender<'a> {
         if matches!(self.operation, Operation::Edit) {
             for decl in &mut var_decl.decls {
                 if let Some(ident) = decl.name.as_ident() {
-                    if ident.sym.to_string() == self.target_var_name {
+                    if ident.sym == self.target_var_name {
                         if let Some(init) = &mut decl.init {
                             if let Expr::New(new_expr) = init.as_mut() {
                                 if let Expr::Ident(callee_ident) = &*new_expr.callee {
@@ -215,7 +215,7 @@ pub fn extend_hook_object_to_ast(
 
     let result = code_gen_from_ast_vist(file_content, &mut hook_extender);
     if hook_extender.find == FindCondition::Found {
-        Ok(result)
+        result
     } else {
         Err(hook_extender.find.message().to_string())
     }
