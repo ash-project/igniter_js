@@ -6,8 +6,6 @@
 //! `liveSocket` initialization.
 //! Designed specifically for manipulating the JavaScript Abstract Syntax Tree (AST) using SWC.
 
-use std::collections::HashSet;
-
 use crate::parsers::javascript::helpers::*;
 
 use super::ast::{FindCondition, Operation};
@@ -205,13 +203,7 @@ pub fn extend_hook_object_to_ast(
     file_content: &str,
     new_objects: Vec<&str>,
 ) -> Result<String, String> {
-    let unique_objects: Vec<&str> = new_objects
-        .into_iter()
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-
-    let mut hook_extender = HookExtender::new("liveSocket", unique_objects);
+    let mut hook_extender = HookExtender::new("liveSocket", new_objects);
 
     let result = code_gen_from_ast_vist(file_content, &mut hook_extender);
     if hook_extender.find == FindCondition::Found {

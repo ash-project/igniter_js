@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
@@ -62,7 +64,9 @@ pub fn extend_hook_object_to_ast_nif(
     file_content: String,
     names: Vec<String>,
 ) -> NifResult<Term> {
-    let vec_of_strs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let unique_names: HashSet<String> = names.into_iter().collect();
+    let mut vec_of_strs: Vec<&str> = unique_names.iter().map(|s| s.as_str()).collect();
+    vec_of_strs.sort();
     let (status, result) = match extend_hook_object_to_ast(&file_content, vec_of_strs) {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
