@@ -124,7 +124,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     ^remove_a_module_output = assert outptu
 
-    remove_two_modules_output = "let Hooks = {};\n"
+    remove_two_modules_output = "import { foo } from \"module-name\";\nlet Hooks = {};\n"
 
     {:ok, :remove_imports, outptu} =
       Parser.remove_imports(
@@ -143,7 +143,8 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     ^none_imported_module_output = assert outptu
 
-    remove_a_module_output = "import bar from \"another-module\";\nlet Hooks = {};\n"
+    remove_a_module_output =
+      "import { foo } from \"module-name\";\nimport bar from \"another-module\";\nlet Hooks = {};\n"
 
     {:ok, :remove_imports, outptu} =
       Parser.remove_imports(File.read!(@invalid_app_with_removed_import), "module-name")
@@ -155,7 +156,10 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     {:ok, :remove_imports, outptu} =
       Parser.remove_imports(
         File.read!(@invalid_app_with_removed_import),
-        ["module-name", "another-module"]
+        """
+        import { foo } from "module-name";
+        import bar from "another-module";
+        """
       )
 
     ^remove_two_modules_output = assert outptu

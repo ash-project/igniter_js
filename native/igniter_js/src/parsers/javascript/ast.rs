@@ -554,7 +554,16 @@ mod tests {
         assert!(!result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
         assert!(!result.contains("import { TS } from \"tsobject\";"));
 
-        println!("{}", result)
+        let code = r#"
+        import { foo } from "module-name";
+        import bar from "another-module";
+        let Hooks = {};
+        "#;
+
+        let result = remove_import_from_ast(code, "import bar from \"another-module\";")
+            .expect("Failed to generate code");
+
+        println!("{}", result);
     }
 
     #[test]
