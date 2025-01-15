@@ -69,17 +69,12 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
   Parser.remove_imports(js_content, "SomeModule")
-  Parser.remove_imports(js_content, ["SomeModule", "AnotherModule"], :content)
   Parser.remove_imports("/path/to/file.js", "SomeModule", :path)
   ```
   """
   def remove_imports(file_path_or_content, module, type \\ :content)
 
-  def remove_imports(file_path_or_content, module, type) when is_binary(module) do
-    remove_imports(file_path_or_content, [module], type)
-  end
-
-  def remove_imports(file_path_or_content, modules, type) when is_list(modules) do
+  def remove_imports(file_path_or_content, modules, type) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
@@ -120,6 +115,41 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       __ENV__.function,
       fn file_content ->
         Native.find_live_socket_node_from_ast_nif(file_content)
+      end,
+      type
+    )
+  end
+
+  @doc """
+  Check if a specific var exists in the given file or content and returns boolean.
+
+  ```elixir
+  alias IgniterJs.Parsers.Javascript.Parser
+  Parser.exist_live_socket?(js_content)
+  Parser.exist_live_socket?(js_content, :content)
+  Parser.exist_live_socket?("/path/to/file.js", :path)
+  ```
+  """
+  def exist_var?(file_path_or_content, type \\ :content) do
+    elem(exist_var(file_path_or_content, type), 0) == :ok
+  end
+
+  @doc """
+  Check if an specific var exists in the given file or content and returns tuple.
+
+  ```elixir
+  alias IgniterJs.Parsers.Javascript.Parser
+  Parser.exist_live_socket(js_content, var_name)
+  Parser.exist_live_socket(js_content, var_name, :content)
+  Parser.exist_live_socket("/path/to/file.js", var_name, :path)
+  ```
+  """
+  def exist_var(file_path_or_content, var_name, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        Native.contains_variable_from_ast_nif(file_content, var_name)
       end,
       type
     )
