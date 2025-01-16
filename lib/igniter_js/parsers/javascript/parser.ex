@@ -130,7 +130,7 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.exist_live_socket?("/path/to/file.js", :path)
   ```
   """
-  def exist_var?(file_path_or_content, type \\ :content) do
+  def var_exists?(file_path_or_content, type \\ :content) do
     elem(exist_var(file_path_or_content, type), 0) == :ok
   end
 

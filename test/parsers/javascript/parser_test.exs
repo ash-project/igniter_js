@@ -363,7 +363,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     """
 
     {:error, :exist_var, false} = assert Parser.exist_var(code, "test_name")
-    assert !Parser.exist_var?(code, "test_name")
+    assert !Parser.var_exists?(code, "test_name")
 
     code = """
     import { foo } from "module-name";
@@ -374,7 +374,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     let igniterJS = %{stack: ["rust", "elixir", "js"]}
     """
 
-    assert Parser.exist_var?(code, "igniterJS")
+    assert Parser.var_exists?(code, "igniterJS")
     {:ok, :exist_var, true} = assert Parser.exist_var(code, "igniterJS")
   end
 end
