@@ -121,6 +121,12 @@ fn specifier_equals(new_spec: &ImportSpecifier, existing_spec: &ImportSpecifier)
         (ImportSpecifier::Named(new_named), ImportSpecifier::Named(existing_named)) => {
             new_named.local.sym == existing_named.local.sym
         }
+        (ImportSpecifier::Default(new_named), ImportSpecifier::Default(existing_named)) => {
+            new_named.local.sym == existing_named.local.sym
+        }
+        (ImportSpecifier::Namespace(new_named), ImportSpecifier::Namespace(existing_named)) => {
+            new_named.local.sym == existing_named.local.sym
+        }
         _ => false,
     }
 }
