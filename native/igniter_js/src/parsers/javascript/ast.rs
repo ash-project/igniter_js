@@ -61,7 +61,7 @@ struct ASTVisitImport<'a> {
     operation: Operation,
 }
 
-impl<'a> Default for ASTVisitImport<'a> {
+impl Default for ASTVisitImport<'_> {
     fn default() -> Self {
         Self {
             code: "",
@@ -498,6 +498,7 @@ mod tests {
             import "phoenix_html";
             import { Socket, SocketV1 } from "phoenix";
             import { TS } from "tsobject";
+            import ScrollArea from "./scrollArea.js";
 
             // This is first test we need to have
             console.log("We are here");
@@ -510,6 +511,7 @@ mod tests {
                 import { Socket, SocketV1 } from "phoenix";
                 import { TS } from "tsobject";
                 import { NoneRepeated } from "orepeat";
+                import ScrollArea from "./scrollArea.js";
             "#;
         let result = insert_import_to_ast(code, import).expect("Failed to generate code");
 

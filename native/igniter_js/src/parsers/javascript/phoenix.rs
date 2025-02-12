@@ -31,7 +31,7 @@ impl<'a> HookExtender<'a> {
     }
 }
 
-impl<'a> VisitMut for HookExtender<'a> {
+impl VisitMut for HookExtender<'_> {
     fn visit_mut_var_decl(&mut self, var_decl: &mut VarDecl) {
         if matches!(self.operation, Operation::Edit) {
             for decl in &mut var_decl.decls {
@@ -65,7 +65,7 @@ impl<'a> VisitMut for HookExtender<'a> {
     }
 }
 
-impl<'a> HookExtender<'a> {
+impl HookExtender<'_> {
     fn extend_or_create_hooks(&mut self, obj_expr: &mut ObjectLit) {
         if let Some(hooks_property) = obj_expr.props.iter_mut().find_map(|prop| {
             if let PropOrSpread::Prop(prop) = prop {
@@ -135,7 +135,7 @@ impl<'a> HookExtender<'a> {
     }
 }
 
-impl<'a> HookExtender<'a> {
+impl HookExtender<'_> {
     fn remove_objects_from_hooks(
         &mut self,
         obj_expr: &mut ObjectLit,
