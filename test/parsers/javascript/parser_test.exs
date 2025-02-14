@@ -241,6 +241,36 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        another,\n        something\n    }\n});\n"
 
     ^considerd_output = assert output
+
+    js_input_code =
+      """
+      let Hooks = {};
+      let liveSocket = new LiveSocket("/live", Socket, {
+        longPollFallbackMs: 2500,
+        params: {
+          _csrf_token: csrfToken,
+        },
+        hooks: {
+          something,
+          ...MishkaComponent
+        },
+      });
+      """
+
+    {:ok, :extend_hook_object, output} =
+      assert Parser.extend_hook_object(js_input_code, ["...MishkaComponent", "something"])
+
+    string_counter = fn string, pattern ->
+      Regex.scan(Regex.compile!(pattern), string)
+      |> length()
+    end
+
+    considerd_output =
+      "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        something,\n        ...MishkaComponent\n    }\n});\n"
+
+    ^considerd_output = assert output
+
+    1 = assert string_counter.(considerd_output, "\\.\\.\\.MishkaComponent")
   end
 
   test "Remove objects of hooks key inside LiveSocket:: remove_objects_from_hooks" do
