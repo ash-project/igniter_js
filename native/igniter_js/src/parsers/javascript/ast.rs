@@ -634,6 +634,34 @@ mod tests {
         let result =
             extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone());
         assert!(result.is_err());
+
+        let code = r#"
+            import ScrollArea from "./scrollArea.js";
+
+            const Components = {
+              ScrollArea,
+            };
+
+            export default Components;
+            "#;
+
+        let object_names = ["ScrollArea", "NoneComponent"];
+
+        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+        assert!(result.is_ok());
+
+        let code = r#"
+            import ScrollArea from "./scrollArea.js";
+
+            const Components = {};
+
+            export default Components;
+            "#;
+
+        let object_names = ["ScrollArea", "NoneComponent", "...NoneComponent"];
+        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+
+        assert!(result.is_ok());
     }
 
     #[test]
