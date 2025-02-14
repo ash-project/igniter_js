@@ -260,17 +260,12 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     {:ok, :extend_hook_object, output} =
       assert Parser.extend_hook_object(js_input_code, ["...MishkaComponent", "something"])
 
-    string_counter = fn string, pattern ->
-      Regex.scan(Regex.compile!(pattern), string)
-      |> length()
-    end
-
     considerd_output =
       "let Hooks = {};\nlet liveSocket = new LiveSocket(\"/live\", Socket, {\n    longPollFallbackMs: 2500,\n    params: {\n        _csrf_token: csrfToken\n    },\n    hooks: {\n        something,\n        ...MishkaComponent\n    }\n});\n"
 
     ^considerd_output = assert output
 
-    1 = assert string_counter.(considerd_output, "\\.\\.\\.MishkaComponent")
+    1 = assert string_counter(considerd_output, "\\.\\.\\.MishkaComponent")
   end
 
   test "Remove objects of hooks key inside LiveSocket:: remove_objects_from_hooks" do
@@ -384,6 +379,28 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
                "TestHook",
                :path
              )
+
+    code = """
+    import ScrollArea from "./scrollArea.js";
+
+    const Components = {};
+
+    export default Components;
+    """
+
+    considerd_output =
+      "import ScrollArea from \"./scrollArea.js\";\nconst Components = {\n    ...NoneComponent,\n    NoneComponent,\n    ScrollArea\n};\nexport default Components;\n"
+
+    names = ["ScrollArea", "NoneComponent", "...NoneComponent", "NoneComponent", "ScrollArea"]
+
+    {:ok, :extend_var_object_by_object_names, output} =
+      assert Parser.extend_var_object_by_object_names(code, "Components", names)
+
+    ^considerd_output = assert output
+
+    1 = assert string_counter(considerd_output, "\\.\\.\\.NoneComponent")
+    2 = assert string_counter(considerd_output, "ScrollArea")
+    1 = assert string_counter(considerd_output, "(^|[^.])NoneComponent")
   end
 
   test "Check existing vars :: exist_var" do
@@ -406,5 +423,10 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     assert Parser.var_exists?(code, "igniterJS")
     {:ok, :exist_var, true} = assert Parser.exist_var(code, "igniterJS")
+  end
+
+  defp string_counter(string, pattern) do
+    Regex.scan(Regex.compile!(pattern), string)
+    |> length()
   end
 end
