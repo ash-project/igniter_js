@@ -57,7 +57,14 @@ impl<'a> HookExtender<'a> {
                             false
                         }
                     }
-                    _ => false,
+                    PropOrSpread::Spread(spread) => {
+                        if let Expr::Ident(ident) = &*spread.expr {
+                            let spread_sym = format!("...{}", ident.sym);
+                            spread_sym == *new_object
+                        } else {
+                            false
+                        }
+                    }
                 });
 
                 if !already_exists {
@@ -293,7 +300,6 @@ mod tests {
         let new_objects = vec!["ObjectOne", "CopyMixInstallationHook", "ObjectTwo"];
         let result = extend_hook_object_to_ast(code, new_objects);
         assert!(result.is_ok());
-        println!("{}", result.unwrap());
 
         let code = r#"
         let NoneSocket = new LiveSocket("/live", Socket, {
@@ -340,7 +346,24 @@ mod tests {
         let new_objects = vec!["ObjectOne", "CopyMixInstallationHook", "...ObjectTwo"];
         let result = extend_hook_object_to_ast(code, new_objects);
         assert!(result.is_ok());
-        println!("{}", result.unwrap());
+
+        let code = r#"
+        let liveSocket = new LiveSocket("/live", Socket, {
+          hooks: { ...Hooks, ObjectOneTwo, ...CopyMixInstallationHook },
+          longPollFallbackMs: 2500,
+          params: { _csrf_token: csrfToken },
+        });
+        "#;
+
+        let new_objects = vec![
+            "ObjectOne",
+            "...CopyMixInstallationHook",
+            "ObjectOneTwo",
+            "...CopyMixInstallationHook",
+        ];
+        let result = extend_hook_object_to_ast(code, new_objects);
+        assert!(result.is_ok());
+        println!("{}", result.unwrap())
     }
 
     #[test]
