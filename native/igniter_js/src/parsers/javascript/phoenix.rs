@@ -29,43 +29,7 @@ impl<'a> HookExtender<'a> {
             operation: Operation::Edit,
         }
     }
-}
 
-impl VisitMut for HookExtender<'_> {
-    fn visit_mut_var_decl(&mut self, var_decl: &mut VarDecl) {
-        if matches!(self.operation, Operation::Edit) {
-            for decl in &mut var_decl.decls {
-                if let Some(ident) = decl.name.as_ident() {
-                    if ident.sym == self.target_var_name {
-                        if let Some(init) = &mut decl.init {
-                            if let Expr::New(new_expr) = init.as_mut() {
-                                if let Expr::Ident(callee_ident) = &*new_expr.callee {
-                                    if callee_ident.sym == "LiveSocket" {
-                                        self.find = FindCondition::FoundError("".to_string());
-
-                                        if let Some(args) = &mut new_expr.args {
-                                            if let Some(ExprOrSpread { expr, .. }) = args.last_mut()
-                                            {
-                                                if let Expr::Object(obj_expr) = &mut **expr {
-                                                    self.find = FindCondition::Found;
-                                                    self.extend_or_create_hooks(obj_expr);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        var_decl.visit_mut_children_with(self)
-    }
-}
-
-impl HookExtender<'_> {
     fn extend_or_create_hooks(&mut self, obj_expr: &mut ObjectLit) {
         if let Some(hooks_property) = obj_expr.props.iter_mut().find_map(|prop| {
             if let PropOrSpread::Prop(prop) = prop {
@@ -133,9 +97,7 @@ impl HookExtender<'_> {
                 }))));
         }
     }
-}
 
-impl HookExtender<'_> {
     fn remove_objects_from_hooks(
         &mut self,
         obj_expr: &mut ObjectLit,
@@ -174,6 +136,40 @@ impl HookExtender<'_> {
                 }
             });
         }
+    }
+}
+
+impl VisitMut for HookExtender<'_> {
+    fn visit_mut_var_decl(&mut self, var_decl: &mut VarDecl) {
+        if matches!(self.operation, Operation::Edit) {
+            for decl in &mut var_decl.decls {
+                if let Some(ident) = decl.name.as_ident() {
+                    if ident.sym == self.target_var_name {
+                        if let Some(init) = &mut decl.init {
+                            if let Expr::New(new_expr) = init.as_mut() {
+                                if let Expr::Ident(callee_ident) = &*new_expr.callee {
+                                    if callee_ident.sym == "LiveSocket" {
+                                        self.find = FindCondition::FoundError("".to_string());
+
+                                        if let Some(args) = &mut new_expr.args {
+                                            if let Some(ExprOrSpread { expr, .. }) = args.last_mut()
+                                            {
+                                                if let Expr::Object(obj_expr) = &mut **expr {
+                                                    self.find = FindCondition::Found;
+                                                    self.extend_or_create_hooks(obj_expr);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var_decl.visit_mut_children_with(self)
     }
 }
 
@@ -333,6 +329,18 @@ mod tests {
         let new_objects = vec!["ObjectOne", "CopyMixInstallationHook", "ObjectTwo"];
         let result = extend_hook_object_to_ast(code, new_objects);
         assert!(result.is_ok());
+
+        let code = r#"
+        let liveSocket = new LiveSocket("/live", Socket, {
+          longPollFallbackMs: 2500,
+          params: { _csrf_token: csrfToken },
+        });
+        "#;
+
+        let new_objects = vec!["ObjectOne", "CopyMixInstallationHook", "...ObjectTwo"];
+        let result = extend_hook_object_to_ast(code, new_objects);
+        assert!(result.is_ok());
+        println!("{}", result.unwrap());
     }
 
     #[test]
