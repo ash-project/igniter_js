@@ -16,5 +16,9 @@ rustler::atoms! {
     statistics_from_ast_nif,
     extend_var_object_property_by_names_to_ast_nif,
     contains_variable_from_ast_nif,
+    format_css_nif,
+    is_css_formatted_nif,
+    format_js_nif,
+    is_js_formatted_nif
     // Resource Atoms
 }
