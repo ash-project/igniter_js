@@ -47,5 +47,13 @@ defmodule IgniterJs.Native do
   def extend_var_object_property_by_names_to_ast_nif(_file_content, _var_name, _object_names),
     do: error()
 
+  def format_js_nif(_file_content), do: error()
+
+  def is_js_formatted_nif(_file_content), do: error()
+
+  def format_css_nif(_file_content), do: error()
+
+  def is_css_formatted_nif(_file_content), do: error()
+
   defp error, do: :erlang.nif_error(:nif_not_loaded)
 end
