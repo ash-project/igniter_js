@@ -5,6 +5,8 @@ defmodule IgniterJs.Parsers.CSS.Formatter do
   Implemented Functions) for performing the actual formatting and checking.
   """
 
+  # We set version of biemojs based on https://github.com/brioche-dev/brioche/pull/184
+
   alias IgniterJs.Native
   import IgniterJs.Helpers, only: [call_nif_fn: 4]
 
