@@ -1,4 +1,4 @@
-defmodule IgniterJs.Parsers.Css.Formatter do
+defmodule IgniterJs.Parsers.CSS.Formatter do
   @moduledoc """
   This module provides functions to check if a CSS file is formatted
   and to format CSS files. It interacts with the Native NIF (Native
