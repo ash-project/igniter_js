@@ -449,6 +449,50 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
     Err(false)
 }
 
+pub fn insert_ast_at_index(
+    file_content: &str,
+    insert_code: &str,
+    index: isize,
+) -> Result<String, String> {
+    let (mut module, comments, cm) = parse(file_content)?;
+    let (insert_module, _, _) = parse(insert_code)?;
+
+    let insert_position = if index == -1 {
+        0
+    } else if index >= module.body.len() as isize || index < -1 {
+        return Err("Index out of bounds".to_string());
+    } else {
+        (index as usize) + 1
+    };
+
+    module
+        .body
+        .splice(insert_position..insert_position, insert_module.body);
+
+    Ok(code_gen_from_ast_module(&mut module, comments, cm))
+}
+
+pub fn replace_ast_at_index(
+    file_content: &str,
+    replace_code: &str,
+    index: usize,
+) -> Result<String, String> {
+    let (mut module, comments, cm) = parse(file_content)?;
+    let (replace_module, _, _) = parse(replace_code)?;
+
+    if index >= module.body.len() {
+        return Err("Index out of bounds".to_string());
+    }
+
+    if replace_module.body.is_empty() {
+        return Err("Replacement AST is empty".to_string());
+    }
+
+    module.body.splice(index..=index, replace_module.body);
+
+    Ok(code_gen_from_ast_module(&mut module, comments, cm))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -677,6 +721,117 @@ mod tests {
         let result = contains_variable_from_ast(code, "liveSocket");
 
         println!("{:#?}", result.unwrap())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_insert_ast_at_index() {
+            let file_content = "function a() {} function b() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, -1);
+
+            assert!(result.is_ok());
+
+            let code = r#"
+                let liveSocket = new LiveSocket("/live", Socket, {
+                  hooks: { ...Hooks, CopyMixInstallationHook },
+                  longPollFallbackMs: 2500,
+                  params: { _csrf_token: csrfToken },
+                });
+
+                const newFunc = () => {
+                  console.log('New function called');
+                };
+
+                let newVar = 'Hello';
+                "#;
+
+            let insert_code = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+
+            let result = insert_ast_at_index(code, insert_code, 0);
+
+            assert!(result.is_ok());
+
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+        }
+
+        #[test]
+        fn test_insert_ast_at_index_out_of_bounds() {
+            let file_content = "function a() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, 5);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
+        }
+
+        #[test]
+        fn test_replace_ast_at_index() {
+            let file_content = "function a() {} function b() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = replace_ast_at_index(file_content, insert_code, 0);
+
+            assert!(result.is_ok());
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+
+            let code = r#"
+                let liveSocket = new LiveSocket("/live", Socket, {
+                  hooks: { ...Hooks, CopyMixInstallationHook },
+                  longPollFallbackMs: 2500,
+                  params: { _csrf_token: csrfToken },
+                });
+
+                const newFunc = () => {
+                  console.log('New function called');
+                };
+
+                let newVar = 'Hello';
+                "#;
+
+            let insert_code = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+
+            let result = replace_ast_at_index(code, insert_code, 2);
+
+            assert!(result.is_ok());
+
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+        }
+
+        #[test]
+        fn test_replace_ast_at_index_of_bounds() {
+            let file_content = "function a() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = replace_ast_at_index(file_content, insert_code, 5);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
+        }
     }
 }
 
