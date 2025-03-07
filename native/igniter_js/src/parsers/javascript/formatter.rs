@@ -4,6 +4,33 @@ use biome_js_formatter::format_node;
 use biome_js_parser::{parse, JsParserOptions};
 use biome_js_syntax::{JsFileSource, ModuleKind};
 
+/// Formats JavaScript source code using a standardized formatting style.
+///
+/// This function parses the provided JavaScript `source_code`, checks for syntax errors,
+/// and then formats it according to predefined formatting options. It ensures consistent
+/// indentation and structure.
+///
+/// # Arguments
+/// * `source_code` - A string containing JavaScript source code.
+///
+/// # Returns
+/// * `Ok(String)` - The formatted JavaScript code.
+/// * `Err(String)` - If parsing or formatting fails.
+///
+/// # Errors
+/// * Returns `"Parsing failed due to syntax errors."` if the input code contains syntax errors.
+/// * Returns `"Formatting failed: <error message>"` if the formatting process encounters an issue.
+///
+/// # Example
+/// ```rust
+/// let js_code = "function test(){console.log('Hello, world!');}";
+/// let result = format(js_code);
+///
+/// assert!(result.is_ok());
+/// let formatted_code = result.unwrap();
+/// assert!(formatted_code.contains("function test() {"));
+/// assert!(formatted_code.contains("console.log('Hello, world!');"));
+/// ```
 pub fn format(source_code: &str) -> Result<String, String> {
     let parsed = parse(
         source_code,
@@ -28,6 +55,33 @@ pub fn format(source_code: &str) -> Result<String, String> {
     Ok(formatted.into_code())
 }
 
+/// Checks if the given JavaScript source code is already formatted.
+///
+/// This function formats the provided `source_code` and compares it with the original.
+/// If the formatted version matches the input (ignoring leading and trailing spaces),
+/// it returns `true`; otherwise, it returns `false`.
+///
+/// # Arguments
+/// * `source_code` - A string containing JavaScript source code.
+///
+/// # Returns
+/// * `Ok(true)` - If the input is already correctly formatted.
+/// * `Ok(false)` - If formatting would modify the input code.
+/// * `Err(String)` - If formatting fails due to syntax errors or other issues.
+///
+/// # Errors
+/// * Returns an error if the formatting process encounters a failure.
+///
+/// # Example
+/// ```rust
+/// let formatted_js = "function test() {\n    console.log('Hello, world!');\n}";
+/// let result = is_formatted(formatted_js);
+/// assert_eq!(result, Ok(true));
+///
+/// let unformatted_js = "function test(){console.log('Hello, world!');}";
+/// let result = is_formatted(unformatted_js);
+/// assert_eq!(result, Ok(false));
+/// ```
 pub fn is_formatted(source_code: &str) -> Result<bool, String> {
     let formatted_code = format(source_code)?;
     Ok(formatted_code.trim() == source_code.trim())
