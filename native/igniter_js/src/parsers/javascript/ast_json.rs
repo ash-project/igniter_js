@@ -5,6 +5,40 @@ use oxc_parser::{ParseOptions, Parser};
 use oxc_span::SourceType;
 use serde_json::json;
 
+/// Converts JavaScript AST to the ESTree format.
+///
+/// This function takes JavaScript source code, parses it into an Abstract Syntax Tree (AST),
+/// and converts it into the ESTree-compatible JSON format. It also captures any parsing errors
+/// and comments within the source.
+///
+/// # Arguments
+/// * `source_text` - The JavaScript source code as a string.
+///
+/// # Returns
+/// * `Ok(String)` - A pretty-printed JSON representation of the AST in ESTree format.
+/// * `Err(String)` - If parsing or JSON serialization fails.
+///
+/// # Errors
+/// * Returns `"Failed to serialize JSON"` if the ESTree AST cannot be converted to JSON.
+/// * If there are syntax errors in `source_text`, they will be included in the `"errors"` field.
+///
+/// # Output Structure
+/// The returned JSON contains:
+/// * `"program"` - The parsed AST in ESTree format.
+/// * `"comments"` - Extracted comments from the source code.
+/// * `"errors"` - A list of syntax errors with details.
+///
+/// # Example
+/// ```rust
+/// let js_code = "function test() { console.log('Hello, world!'); } // Comment";
+/// let result = convert_ast_to_estree(js_code);
+///
+/// assert!(result.is_ok());
+/// let json_output = result.unwrap();
+/// assert!(json_output.contains("\"type\": \"Program\""));
+/// assert!(json_output.contains("\"type\": \"FunctionDeclaration\""));
+/// assert!(json_output.contains("\"comments\""));
+/// ```
 pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
     let source_type = SourceType::from_path("example.js").expect("Invalid file extension");
     let allocator = Allocator::default();
