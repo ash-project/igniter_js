@@ -55,6 +55,10 @@ defmodule IgniterJs.Native do
 
   def convert_ast_to_estree_nif(_file_content), do: error()
 
+  def insert_ast_at_index_nif(_file_content, _insert_code, _index), do: error()
+
+  def replace_ast_at_index_nif(_file_content, _replace_code, _index), do: error()
+
   def is_css_formatted_nif(_file_content), do: error()
 
   defp error, do: :erlang.nif_error(:nif_not_loaded)

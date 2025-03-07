@@ -325,4 +325,81 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
         {:error, :ast_to_estree, error}
     end
   end
+
+  @doc """
+    Inserts a JavaScript AST at the specified index within an existing AST.
+
+    This function takes either a file path or raw JavaScript content, along with the
+    JavaScript code to be inserted and the target index. It processes the AST and inserts
+    the new code at the specified position.
+
+    If `index` is `-1`, the code will be inserted at the beginning of the AST.
+    Otherwise, the code is inserted **after** the specified index.
+
+    ```elixir
+    alias IgniterJs.Parsers.Javascript.Parser
+
+    # Insert after index 1
+    Parser.insert_at_index(js_content, "function newFunc() {}", 1)
+
+    # Insert before all code
+    Parser.insert_at_index(js_content, "function newFunc() {}", -1)
+
+    # Insert using a file path
+    Parser.insert_at_index("/path/to/file.js", "function newFunc() {}", 2, :path)
+    ```
+  """
+  def insert_at_index(
+        file_path_or_content,
+        insert_code,
+        index,
+        type \\ :content
+      ) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        Native.insert_ast_at_index_nif(file_path_or_content, insert_code, index)
+      end,
+      type
+    )
+  end
+
+  @doc """
+  Replaces a JavaScript AST node at the specified index with new JavaScript code.
+
+  This function takes either a file path or raw JavaScript content, along with the
+  JavaScript code that should replace an existing node at the given index. It processes
+  the AST and replaces the target node while preserving the surrounding structure.
+
+  If the `index` is out of bounds, an error is returned.
+
+  ```elixir
+  alias IgniterJs.Parsers.Javascript.Parser
+
+  # Replace node at index 1
+  Parser.replace_at_index(js_content, "function newFunc() {}", 1)
+
+  # Replace node at index 0 (first item)
+  Parser.replace_at_index(js_content, "function newFunc() {}", 0)
+
+  # Replace using a file path
+  Parser.replace_at_index("/path/to/file.js", "function newFunc() {}", 2, :path)
+  ```
+  """
+  def replace_at_index(
+        file_path_or_content,
+        replace_code,
+        index,
+        type \\ :content
+      ) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        Native.replace_ast_at_index_nif(file_path_or_content, replace_code, index)
+      end,
+      type
+    )
+  end
 end
