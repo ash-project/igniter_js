@@ -180,3 +180,33 @@ pub fn convert_ast_to_estree_nif(env: Env, file_content: String) -> NifResult<Te
 
     encode_response(env, status, atoms::convert_ast_to_estree_nif(), result)
 }
+
+#[rustler::nif]
+pub fn insert_ast_at_index_nif(
+    env: Env,
+    file_content: String,
+    insert_code: String,
+    index: isize,
+) -> NifResult<Term> {
+    let (status, result) = match insert_ast_at_index(&file_content, &insert_code, index) {
+        Ok(updated_code) => (atoms::ok(), updated_code),
+        Err(error_msg) => (atoms::error(), error_msg),
+    };
+
+    encode_response(env, status, atoms::insert_ast_at_index_nif(), result)
+}
+
+#[rustler::nif]
+pub fn replace_ast_at_index_nif(
+    env: Env,
+    file_content: String,
+    replace_code: String,
+    index: usize,
+) -> NifResult<Term> {
+    let (status, result) = match replace_ast_at_index(&file_content, &replace_code, index) {
+        Ok(updated_code) => (atoms::ok(), updated_code),
+        Err(error_msg) => (atoms::error(), error_msg),
+    };
+
+    encode_response(env, status, atoms::replace_ast_at_index_nif(), result)
+}

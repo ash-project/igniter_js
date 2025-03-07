@@ -21,5 +21,7 @@ rustler::atoms! {
     format_js_nif,
     is_js_formatted_nif,
     convert_ast_to_estree_nif,
+    insert_ast_at_index_nif,
+    replace_ast_at_index_nif,
     // Resource Atoms
 }
