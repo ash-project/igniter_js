@@ -359,7 +359,7 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.insert_ast_at_index_nif(file_path_or_content, insert_code, index)
+        Native.insert_ast_at_index_nif(file_content, insert_code, index)
       end,
       type
     )
@@ -397,7 +397,7 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.replace_ast_at_index_nif(file_path_or_content, replace_code, index)
+        Native.replace_ast_at_index_nif(file_content, replace_code, index)
       end,
       type
     )
