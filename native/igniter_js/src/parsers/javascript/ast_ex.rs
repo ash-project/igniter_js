@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
+use crate::parsers::javascript::ast_json::convert_ast_to_estree;
 use crate::parsers::javascript::phoenix::*;
 use rustler::{Env, NifResult, NifStruct, NifTaggedEnum, Term};
 
@@ -168,4 +169,14 @@ pub fn extend_var_object_property_by_names_to_ast_nif(
         atoms::extend_var_object_property_by_names_to_ast_nif(),
         result,
     )
+}
+
+#[rustler::nif]
+pub fn convert_ast_to_estree_nif(env: Env, file_content: String) -> NifResult<Term> {
+    let (status, result) = match convert_ast_to_estree(&file_content) {
+        Ok(updated_code) => (atoms::ok(), updated_code),
+        Err(error_msg) => (atoms::error(), error_msg),
+    };
+
+    encode_response(env, status, atoms::convert_ast_to_estree_nif(), result)
 }

@@ -19,6 +19,7 @@ rustler::atoms! {
     format_css_nif,
     is_css_formatted_nif,
     format_js_nif,
-    is_js_formatted_nif
+    is_js_formatted_nif,
+    convert_ast_to_estree_nif,
     // Resource Atoms
 }
