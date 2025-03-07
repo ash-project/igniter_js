@@ -425,6 +425,35 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     {:ok, :exist_var, true} = assert Parser.exist_var(code, "igniterJS")
   end
 
+  test "Convert JS AST to estree" do
+    code = """
+    let Hooks = {};
+
+    let csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      .getAttribute("content");
+
+    let liveSocket = new LiveSocket("/live", Socket, {
+      hooks: { ...Hooks, CopyMixInstallationHook },
+      longPollFallbackMs: 2500,
+      params: { _csrf_token: csrfToken },
+    });
+    """
+
+    {:ok, :ast_to_estree, parsed} = assert Parser.ast_to_estree(code)
+
+    [] = assert parsed["comments"]
+    [] = assert parsed["errors"]
+    3 = assert length(parsed["program"]["body"])
+
+    code = """
+    %InvalidJs{name: "mishka", repo_org: "Ash", repo: "igniterJS"}
+    """
+
+    {:ok, :ast_to_estree, parsed} = assert Parser.ast_to_estree(code)
+    1 = assert length(parsed["errors"])
+  end
+
   defp string_counter(string, pattern) do
     Regex.scan(Regex.compile!(pattern), string)
     |> length()

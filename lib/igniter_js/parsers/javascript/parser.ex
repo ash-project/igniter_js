@@ -295,4 +295,34 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       type
     )
   end
+
+  @doc """
+  Converts a JavaScript AST into the ESTree format.
+
+  This function takes either a file path or raw JavaScript content, processes it
+  and returns the resulting ESTree Map structure.
+
+  ```elixir
+  alias IgniterJs.Parsers.Javascript.Parser
+  Parser.ast_to_estree(js_content)
+  Parser.ast_to_estree("/path/to/file.js", :path)
+  ```
+  """
+  def ast_to_estree(file_path_or_content, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        Native.convert_ast_to_estree_nif(file_content)
+      end,
+      type
+    )
+    |> case do
+      {:ok, _, output} ->
+        {:ok, :ast_to_estree, Jason.decode!(output)}
+
+      {:error, :ast_to_estree, error} ->
+        {:error, :ast_to_estree, error}
+    end
+  end
 end

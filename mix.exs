@@ -106,6 +106,7 @@ defmodule IgniterJs.MixProject do
   defp deps do
     [
       {:rustler, "~> 0.36.1", optional: true},
+      {:jason, "~> 1.4"},
       {:rustler_precompiled, "~> 0.8"},
       {:ex_doc, "~> 0.35", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.12", only: [:dev, :test]},
