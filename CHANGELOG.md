@@ -5,6 +5,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.4.6](https://github.com/ash-project/igniter_js/compare/v0.4.5...v0.4.6) (2025-03-08)
+
+
+
+
+### Features:
+
+* parser: add AST manipulation functions for inserting, replacing, and exporting AST as JSON (#24)
+
 ## [v0.4.5](https://github.com/ash-project/igniter_js/compare/v0.4.4...v0.4.5) (2025-02-24)
 
 
