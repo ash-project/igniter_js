@@ -463,14 +463,14 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     insert_code = "function newFunc() {}"
 
     # Insert at index 1 (after function a)
-    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, 1)
+    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, 2)
     assert updated_code =~ "function a() {}"
     assert updated_code =~ "function b() {}"
     assert updated_code =~ "function newFunc() {}"
     assert String.ends_with?(updated_code, "function newFunc() {}\n")
 
     # Insert at the beginning (-1)
-    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, -1)
+    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, 0)
     assert updated_code =~ "function newFunc() {}"
     assert String.starts_with?(updated_code, "function newFunc() {}")
   end

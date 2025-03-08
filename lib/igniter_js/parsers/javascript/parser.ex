@@ -333,8 +333,6 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
     JavaScript code to be inserted and the target index. It processes the AST and inserts
     the new code at the specified position.
 
-    If `index` is `-1`, the code will be inserted at the beginning of the AST.
-    Otherwise, the code is inserted **after** the specified index.
 
     ```elixir
     alias IgniterJs.Parsers.Javascript.Parser
@@ -343,7 +341,7 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
     Parser.insert_at_index(js_content, "function newFunc() {}", 1)
 
     # Insert before all code
-    Parser.insert_at_index(js_content, "function newFunc() {}", -1)
+    Parser.insert_at_index(js_content, "function newFunc() {}", 0)
 
     # Insert using a file path
     Parser.insert_at_index("/path/to/file.js", "function newFunc() {}", 2, :path)

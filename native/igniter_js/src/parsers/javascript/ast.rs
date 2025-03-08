@@ -541,26 +541,19 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
 /// let updated_code = result.unwrap();
 /// assert!(updated_code.starts_with("function newFunc"));
 /// ```
-
 pub fn insert_ast_at_index(
     file_content: &str,
     insert_code: &str,
-    index: isize,
+    index: usize,
 ) -> Result<String, String> {
     let (mut module, comments, cm) = parse(file_content)?;
     let (insert_module, _, _) = parse(insert_code)?;
 
-    let insert_position = if index == -1 {
-        0
-    } else if index >= module.body.len() as isize || index < -1 {
+    if index > module.body.len() {
         return Err("Index out of bounds".to_string());
-    } else {
-        (index as usize) + 1
-    };
+    }
 
-    module
-        .body
-        .splice(insert_position..insert_position, insert_module.body);
+    module.body.splice(index..index, insert_module.body);
 
     Ok(code_gen_from_ast_module(&mut module, comments, cm))
 }
@@ -854,9 +847,11 @@ mod tests {
             let file_content = "function a() {} function b() {}";
             let insert_code = "function newFunc() {}";
 
-            let result = insert_ast_at_index(file_content, insert_code, -1);
+            let result = insert_ast_at_index(file_content, insert_code, 1);
 
             assert!(result.is_ok());
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
 
             let code = r#"
                 let liveSocket = new LiveSocket("/live", Socket, {

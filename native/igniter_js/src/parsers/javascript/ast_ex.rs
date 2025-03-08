@@ -186,7 +186,7 @@ pub fn insert_ast_at_index_nif(
     env: Env,
     file_content: String,
     insert_code: String,
-    index: isize,
+    index: usize,
 ) -> NifResult<Term> {
     let (status, result) = match insert_ast_at_index(&file_content, &insert_code, index) {
         Ok(updated_code) => (atoms::ok(), updated_code),
