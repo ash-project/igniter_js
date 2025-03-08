@@ -405,6 +405,34 @@ impl VisitMut for ObjectExtender {
     }
 }
 
+/// Extends an object variable by adding new properties to its declaration in the JavaScript AST.
+///
+/// This function searches for a variable with the name `var_name` and modifies its
+/// object properties by appending new ones from `object_names`. If the variable is found,
+/// it modifies the AST and returns the updated JavaScript code.
+///
+/// # Arguments
+/// * `file_content` - The JavaScript source code as a string.
+/// * `var_name` - The name of the variable (object) to extend.
+/// * `object_names` - A list of new property names to add to the object.
+///
+/// # Returns
+/// * `Ok(String)` - The updated JavaScript source code with the extended object.
+/// * `Err(String)` - If the target variable is not found or an error occurs.
+///
+/// # Errors
+/// * Returns an error if the target variable does not exist in the AST.
+/// * Returns an error if the AST transformation fails.
+///
+/// # Example
+/// ```rust
+/// let js_code = "let obj = { a: 1, b: 2 };";
+/// let updated_code = extend_var_object_property_by_names_to_ast(js_code, "obj", ["c", "d"]);
+/// assert!(updated_code.is_ok());
+/// let result = updated_code.unwrap();
+/// assert!(result.contains("c"));
+/// assert!(result.contains("d"));
+/// ```
 pub fn extend_var_object_property_by_names_to_ast<'a>(
     file_content: &str,
     var_name: &str,
@@ -430,6 +458,32 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
     }
 }
 
+/// Checks if a given variable is declared in the JavaScript AST.
+///
+/// This function parses the provided JavaScript `file_content` and searches for
+/// a variable declaration (`let`) with the specified `variable_name`. If the variable
+/// is found, it returns `Ok(true)`, otherwise, it returns `Err(false)`.
+///
+/// # Arguments
+/// * `file_content` - The JavaScript source code as a string.
+/// * `variable_name` - The name of the variable to search for.
+///
+/// # Returns
+/// * `Ok(true)` - If the variable is found.
+/// * `Err(false)` - If the variable is not found or an error occurs during parsing.
+///
+/// # Errors
+/// * Returns `Err(false)` if the variable is not found in the AST.
+///
+/// # Example
+/// ```rust
+/// let js_code = "let myVar = 42;";
+/// let result = contains_variable_from_ast(js_code, "myVar");
+/// assert_eq!(result, Ok(true));
+///
+/// let result = contains_variable_from_ast(js_code, "anotherVar");
+/// assert_eq!(result, Err(false));
+/// ```
 pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Result<bool, bool> {
     let (module, _, _) = parse(file_content).expect("Failed to parse imports");
 
@@ -447,6 +501,107 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
         }
     }
     Err(false)
+}
+
+/// Inserts a new JavaScript AST at a specified index in the existing AST.
+///
+/// This function takes an existing JavaScript source code (`file_content`) and inserts
+/// the AST of `insert_code` at the given `index`.
+///
+/// # Arguments
+/// * `file_content` - The original JavaScript source code as a string.
+/// * `insert_code` - The JavaScript code whose AST will be inserted.
+/// * `index` - The zero-based index where the new AST should be inserted.
+///
+/// # Returns
+/// * `Ok(String)` - The updated JavaScript source code after insertion.
+/// * `Err(String)` - An error message if the index is out of bounds.
+///
+/// # Errors
+/// * Returns `"Index out of bounds"` if the given `index` is greater than the number of AST nodes.
+/// * Returns `"Failed to parse module"` if either `file_content` or `insert_code` cannot be parsed.
+///
+/// # Example
+/// ```rust
+/// let file_content = "function a() {} function b() {}";
+/// let insert_code = "function newFunc() {}";
+///
+/// // Insert after index 1 (after function `a`)
+/// let result = insert_ast_at_index(file_content, insert_code, 1);
+/// assert!(result.is_ok());
+/// let updated_code = result.unwrap();
+/// assert!(updated_code.contains("newFunc"));
+///
+/// let result = insert_ast_at_index(file_content, insert_code, 0);
+/// assert!(result.is_ok());
+/// let updated_code = result.unwrap();
+/// assert!(updated_code.starts_with("function newFunc"));
+/// ```
+pub fn insert_ast_at_index(
+    file_content: &str,
+    insert_code: &str,
+    index: usize,
+) -> Result<String, String> {
+    let (mut module, comments, cm) = parse(file_content)?;
+    let (insert_module, _, _) = parse(insert_code)?;
+
+    if index > module.body.len() {
+        return Err("Index out of bounds".to_string());
+    }
+
+    module.body.splice(index..index, insert_module.body);
+
+    Ok(code_gen_from_ast_module(&mut module, comments, cm))
+}
+
+/// Replaces the AST node at a specified index with a new JavaScript AST.
+///
+/// This function takes an existing JavaScript source code (`file_content`) and replaces
+/// the AST node at the given `index` with the parsed AST of `replace_code`.
+/// If the `index` is out of bounds or the replacement AST is empty, it returns an error.
+///
+/// # Arguments
+/// * `file_content` - The original JavaScript source code as a string.
+/// * `replace_code` - The JavaScript code whose AST will replace the existing one.
+/// * `index` - The zero-based index of the AST node to be replaced.
+///
+/// # Returns
+/// * `Ok(String)` - The updated JavaScript source code after replacement.
+/// * `Err(String)` - An error message if the index is out of bounds or the replacement AST is empty.
+///
+/// # Errors
+/// * Returns `"Index out of bounds"` if the given `index` is greater than or equal to the number of AST nodes.
+/// * Returns `"Replacement AST is empty"` if the `replace_code` does not produce a valid AST.
+///
+/// # Example
+/// ```rust
+/// let file_content = "function a() {} function b() {}";
+/// let replace_code = "function newFunc() {}";
+/// let result = replace_ast_at_index(file_content, replace_code, 1);
+///
+/// assert!(result.is_ok());
+/// let updated_code = result.unwrap();
+/// assert!(updated_code.contains("newFunc"));
+/// ```
+pub fn replace_ast_at_index(
+    file_content: &str,
+    replace_code: &str,
+    index: usize,
+) -> Result<String, String> {
+    let (mut module, comments, cm) = parse(file_content)?;
+    let (replace_module, _, _) = parse(replace_code)?;
+
+    if index >= module.body.len() {
+        return Err("Index out of bounds".to_string());
+    }
+
+    if replace_module.body.is_empty() {
+        return Err("Replacement AST is empty".to_string());
+    }
+
+    module.body.splice(index..=index, replace_module.body);
+
+    Ok(code_gen_from_ast_module(&mut module, comments, cm))
 }
 
 #[cfg(test)]
@@ -677,6 +832,135 @@ mod tests {
         let result = contains_variable_from_ast(code, "liveSocket");
 
         println!("{:#?}", result.unwrap())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_insert_ast_at_index() {
+            let file_content = "function a() {} function b() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, 1);
+
+            assert!(result.is_ok());
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+
+            let code = r#"
+                let liveSocket = new LiveSocket("/live", Socket, {
+                  hooks: { ...Hooks, CopyMixInstallationHook },
+                  longPollFallbackMs: 2500,
+                  params: { _csrf_token: csrfToken },
+                });
+
+                const newFunc = () => {
+                  console.log('New function called');
+                };
+
+                let newVar = 'Hello';
+                "#;
+
+            let insert_code = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+
+            let result = insert_ast_at_index(code, insert_code, 0);
+
+            assert!(result.is_ok());
+
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+        }
+
+        #[test]
+        fn test_insert_ast_at_index_out_of_bounds() {
+            let file_content = "function a() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, 5);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
+
+            let file_content = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, 3);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
+        }
+
+        #[test]
+        fn test_replace_ast_at_index() {
+            let file_content = "function a() {} function b() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = replace_ast_at_index(file_content, insert_code, 0);
+
+            assert!(result.is_ok());
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+
+            let code = r#"
+                let liveSocket = new LiveSocket("/live", Socket, {
+                  hooks: { ...Hooks, CopyMixInstallationHook },
+                  longPollFallbackMs: 2500,
+                  params: { _csrf_token: csrfToken },
+                });
+
+                const newFunc = () => {
+                  console.log('New function called');
+                };
+
+                let newVar = 'Hello';
+                "#;
+
+            let insert_code = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+
+            let result = replace_ast_at_index(code, insert_code, 2);
+
+            assert!(result.is_ok());
+
+            let updated_ast = result.unwrap();
+            println!("{}", updated_ast);
+        }
+
+        #[test]
+        fn test_replace_ast_at_index_of_bounds() {
+            let file_content = "function a() {}";
+            let insert_code = "function newFunc() {}";
+
+            let result = replace_ast_at_index(file_content, insert_code, 5);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
+        }
     }
 }
 

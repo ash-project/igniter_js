@@ -425,6 +425,87 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     {:ok, :exist_var, true} = assert Parser.exist_var(code, "igniterJS")
   end
 
+  test "Convert JS AST to estree" do
+    code = """
+    let Hooks = {};
+
+    let csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      .getAttribute("content");
+
+    let liveSocket = new LiveSocket("/live", Socket, {
+      hooks: { ...Hooks, CopyMixInstallationHook },
+      longPollFallbackMs: 2500,
+      params: { _csrf_token: csrfToken },
+    });
+    """
+
+    {:ok, :ast_to_estree, parsed} = assert Parser.ast_to_estree(code)
+
+    [] = assert parsed["comments"]
+    [] = assert parsed["errors"]
+    3 = assert length(parsed["program"]["body"])
+
+    code = """
+    %InvalidJs{name: "mishka", repo_org: "Ash", repo: "igniterJS"}
+    """
+
+    {:ok, :ast_to_estree, parsed} = assert Parser.ast_to_estree(code)
+    1 = assert length(parsed["errors"])
+  end
+
+  test "inserts JavaScript code at a specific index" do
+    js_code = """
+    function a() {}
+    function b() {}
+    """
+
+    insert_code = "function newFunc() {}"
+
+    # Insert at index 1 (after function a)
+    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, 2)
+    assert updated_code =~ "function a() {}"
+    assert updated_code =~ "function b() {}"
+    assert updated_code =~ "function newFunc() {}"
+    assert String.ends_with?(updated_code, "function newFunc() {}\n")
+
+    # Insert at the beginning (0)
+    {:ok, _, updated_code} = Parser.insert_at_index(js_code, insert_code, 0)
+    assert updated_code =~ "function newFunc() {}"
+    assert String.starts_with?(updated_code, "function newFunc() {}")
+  end
+
+  test "replaces JavaScript code at a specific index" do
+    js_code = """
+    function a() {}
+    function b() {}
+    """
+
+    replace_code = "function replacedFunc() {}"
+
+    # Replace function at index 1 (replace function b)
+    {:ok, _, updated_code} = Parser.replace_at_index(js_code, replace_code, 1)
+    assert updated_code =~ "function a() {}"
+    assert updated_code =~ "function replacedFunc() {}"
+    refute updated_code =~ "function b() {}"
+
+    # Replace function at index 0 (replace function a)
+    {:ok, _, updated_code} = Parser.replace_at_index(js_code, replace_code, 0)
+    assert updated_code =~ "function replacedFunc() {}"
+    refute updated_code =~ "function a() {}"
+    assert String.starts_with?(updated_code, "function replacedFunc() {}")
+  end
+
+  test "returns an error when inserting/replacing out of bounds" do
+    js_code = "function a() {};"
+
+    {:error, _, _} = Parser.insert_at_index(js_code, "function newFunc() {}", 5)
+
+    js_code = "function a() {};"
+
+    {:error, _, _} = Parser.replace_at_index(js_code, "function replacedFunc() {}", 5)
+  end
+
   defp string_counter(string, pattern) do
     Regex.scan(Regex.compile!(pattern), string)
     |> length()
