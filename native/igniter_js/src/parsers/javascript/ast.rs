@@ -506,15 +506,12 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
 /// Inserts a new JavaScript AST at a specified index in the existing AST.
 ///
 /// This function takes an existing JavaScript source code (`file_content`) and inserts
-/// the AST of `insert_code` at the given `index`. If `index = -1`, the new AST is inserted
-/// at the beginning of the code. Otherwise, it is inserted after the specified `index`.
+/// the AST of `insert_code` at the given `index`.
 ///
 /// # Arguments
 /// * `file_content` - The original JavaScript source code as a string.
 /// * `insert_code` - The JavaScript code whose AST will be inserted.
 /// * `index` - The zero-based index where the new AST should be inserted.
-///   * If `index = -1`, the new code is inserted **before all existing nodes**.
-///   * If `index >= 0`, the new code is inserted **after the given index**.
 ///
 /// # Returns
 /// * `Ok(String)` - The updated JavaScript source code after insertion.
@@ -535,8 +532,7 @@ pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Re
 /// let updated_code = result.unwrap();
 /// assert!(updated_code.contains("newFunc"));
 ///
-/// // Insert at the beginning (-1)
-/// let result = insert_ast_at_index(file_content, insert_code, -1);
+/// let result = insert_ast_at_index(file_content, insert_code, 0);
 /// assert!(result.is_ok());
 /// let updated_code = result.unwrap();
 /// assert!(updated_code.starts_with("function newFunc"));
