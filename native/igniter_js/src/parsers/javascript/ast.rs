@@ -894,6 +894,22 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Index out of bounds");
+
+            let file_content = r#"
+                function addedNewFunc1() {
+                  console.log('addedNewFunc1 called');
+                }
+
+                function addedNewFunc2() {
+                  console.log('addedNewFunc2 called');
+                }
+            "#;
+            let insert_code = "function newFunc() {}";
+
+            let result = insert_ast_at_index(file_content, insert_code, 3);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Index out of bounds");
         }
 
         #[test]
