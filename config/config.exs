@@ -23,7 +23,8 @@ config :pythonx, :uv_init,
   version = "0.4.4"
   requires-python = "==3.13.*"
   dependencies = [
-    "tinycss2==1.4.0"
+    "tinycss2==1.4.0",
+    "css_tools==0.1.0"
   ]
   [tool.uv.sources]
   css_tools = { path = "#{File.cwd!()}/plibs/css_tools/dist/css_tools-0.1.0-py3-none-any.whl" }
