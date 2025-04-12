@@ -1,0 +1,12 @@
+pyproject.toml
+setup.py
+src/css_tools/__init__.py
+src/css_tools/extractor.py
+src/css_tools/minifier.py
+src/css_tools/modifier.py
+src/css_tools/parser.py
+src/css_tools.egg-info/PKG-INFO
+src/css_tools.egg-info/SOURCES.txt
+src/css_tools.egg-info/dependency_links.txt
+src/css_tools.egg-info/requires.txt
+src/css_tools.egg-info/top_level.txt
