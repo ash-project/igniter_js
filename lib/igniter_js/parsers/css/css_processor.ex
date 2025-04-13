@@ -148,49 +148,52 @@ defmodule IgniterJs.CSS.CssProcessor do
   A tuple with `{critical_css, non_critical_css}`
   """
   def extract_critical_css(css_content, critical_selectors) do
-    # Initialize result
-    critical_css = ""
-    non_critical_css = css_content
+    # Use Enum.reduce to accumulate both results in a single pass
+    {critical_css, non_critical_css} =
+      Enum.reduce(
+        critical_selectors,
+        # Initial accumulator: {critical_css, non_critical_css}
+        {"", css_content},
+        fn selector, {critical_acc, non_critical_acc} ->
+          # Find selectors in the CSS that match this critical selector
+          {result, _globals} =
+            Pythonx.eval(
+              """
+              import tinycss2
+              from css_tools.parser import parse_stylesheet, get_selector_text, get_rule_declarations
 
-    # Process each critical selector
-    Enum.each(critical_selectors, fn selector ->
-      # Find selectors in the CSS that match this critical selector
-      {result, _globals} =
-        Pythonx.eval(
-          """
-          import tinycss2
-          from css_tools.parser import parse_stylesheet, get_selector_text, get_rule_declarations
+              rules = parse_stylesheet(css_code)
+              matching_rules = []
 
-          rules = parse_stylesheet(css_code)
-          matching_rules = []
+              for rule in rules:
+                  if rule.type == "qualified-rule":
+                      selector = get_selector_text(rule)
+                      if selector == critical_selector or critical_selector in selector.split(','):
+                          declarations = get_rule_declarations(rule)
+                          serialized_content = tinycss2.serialize(declarations).strip()
+                          serialized_content = "\\n".join("    " + line.strip() for line in serialized_content.splitlines() if line.strip())
+                          formatted_rule = f"{selector} {{\\n{serialized_content}\\n}}\\n"
+                          matching_rules.append(formatted_rule)
 
-          for rule in rules:
-              if rule.type == "qualified-rule":
-                  selector = get_selector_text(rule)
-                  if selector == critical_selector or critical_selector in selector.split(','):
-                      declarations = get_rule_declarations(rule)
-                      serialized_content = tinycss2.serialize(declarations).strip()
-                      serialized_content = "\\n".join("    " + line.strip() for line in serialized_content.splitlines() if line.strip())
-                      formatted_rule = f"{selector} {{\\n{serialized_content}\\n}}\\n"
-                      matching_rules.append(formatted_rule)
+              result = "\\n".join(matching_rules)
+              result
+              """,
+              %{"css_code" => non_critical_acc, "critical_selector" => selector}
+            )
 
-          result = "\\n".join(matching_rules)
-          result
-          """,
-          %{"css_code" => non_critical_css, "critical_selector" => selector}
-        )
+          # Extract the matching rules
+          matching_css = Pythonx.decode(result)
 
-      # Extract the matching rules
-      matching_css = Pythonx.decode(result)
+          # Update both critical and non-critical CSS
+          updated_critical = critical_acc <> matching_css <> "\n"
+          updated_non_critical = Parser.remove_selector(non_critical_acc, selector)
 
-      # Add to critical CSS
-      critical_css = critical_css <> matching_css <> "\n"
+          # Return updated tuple for next iteration
+          {updated_critical, updated_non_critical}
+        end
+      )
 
-      # Remove from non-critical CSS
-      non_critical_css = Parser.remove_selector(non_critical_css, selector)
-    end)
-
-    # Return both versions
+    # Return the final result
     {critical_css, non_critical_css}
   end
 

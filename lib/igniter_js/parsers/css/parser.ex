@@ -131,6 +131,7 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   @doc """
   Minifies a CSS stylesheet by removing comments, whitespace, and unnecessary characters.
+  We recommend not using this.
 
   ## Examples
 
@@ -155,6 +156,7 @@ defmodule IgniterJs.Parsers.CSS.Parser do
   @doc """
   Beautifies a CSS stylesheet by adding proper indentation and formatting.
   We recommend using `IgniterJs.Parsers.CSS.Formatter` module instead.
+
   ## Examples
 
       iex> IgniterJs.Parsers.CSS.Parser.beautify(css_code)
@@ -535,6 +537,74 @@ defmodule IgniterJs.Parsers.CSS.Parser do
         result
         """,
         %{"css_code" => css_code}
+      )
+
+    Pythonx.decode(result)
+  end
+
+  @doc """
+  Replaces an entire CSS rule for a specific selector with new declarations.
+
+  ## Parameters
+
+    * `css_code` - The CSS code as a string
+    * `selector` - The CSS selector to replace
+    * `new_declarations` - The new CSS declarations as a string (without curly braces)
+
+  ## Examples
+
+      iex> IgniterJs.Parsers.CSS.Parser.replace_selector_rule(css_code, ".header", "color: blue; font-size: 20px; padding: 10px;")
+      "css with .header rule replaced"
+  """
+  def replace_selector_rule(css_code, selector, new_declarations)
+      when is_binary(css_code) and is_binary(selector) and is_binary(new_declarations) do
+    {result, _globals} =
+      Pythonx.eval(
+        """
+        import tinycss2
+        from css_tools.parser import parse_stylesheet, get_selector_text
+
+        if isinstance(selector, bytes):
+            selector = selector.decode('utf-8')
+        if isinstance(new_declarations, bytes):
+            new_declarations = new_declarations.decode('utf-8')
+
+        rules = parse_stylesheet(css_code)
+        modified_css = ""
+        selector_found = False
+
+        for rule in rules:
+            if rule.type == "qualified-rule":
+                rule_selector = get_selector_text(rule)
+
+                if rule_selector == selector:
+                    selector_found = True
+                    # Format the new declarations
+                    formatted_declarations = "\\n".join("    " + line.strip() for line in new_declarations.split(";") if line.strip())
+                    # Replace the rule with new content
+                    formatted_rule = f"{selector} {{\\n{formatted_declarations}\\n}}\\n"
+                    modified_css += formatted_rule
+                else:
+                    # Keep other rules as they are
+                    modified_css += tinycss2.serialize([rule])
+            else:
+                # Keep other non-qualified rules as they are
+                modified_css += tinycss2.serialize([rule])
+
+        # Add the selector if it wasn't found
+        if not selector_found:
+            formatted_declarations = "\\n".join("    " + line.strip() for line in new_declarations.split(";") if line.strip())
+            new_rule = f"\\n{selector} {{\\n{formatted_declarations}\\n}}\\n"
+            modified_css += new_rule
+
+        result = modified_css.strip()
+        result
+        """,
+        %{
+          "css_code" => css_code,
+          "selector" => selector,
+          "new_declarations" => new_declarations
+        }
       )
 
     Pythonx.decode(result)
