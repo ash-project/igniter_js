@@ -767,4 +767,107 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
     Pythonx.decode(result)
   end
+
+  @doc """
+  Checks if a specific CSS selector exists in the stylesheet.
+
+  ## Parameters
+
+    * `css_code` - The CSS code as a string
+    * `selector` - The CSS selector to check for
+
+  ## Examples
+
+      iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, ".header")
+      true
+
+      iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, "#nonexistent")
+      false
+  """
+  def selector_exists?(css_code, selector) when is_binary(css_code) and is_binary(selector) do
+    {result, _globals} =
+      Pythonx.eval(
+        """
+        from css_tools.parser import parse_stylesheet, get_selector_text
+
+        if isinstance(selector, bytes):
+            selector = selector.decode('utf-8')
+
+        rules = parse_stylesheet(css_code)
+        exists = False
+
+        for rule in rules:
+            if rule.type == "qualified-rule":
+                rule_selector = get_selector_text(rule)
+                if rule_selector == selector:
+                    exists = True
+                    break
+
+        result = exists
+        result
+        """,
+        %{
+          "css_code" => css_code,
+          "selector" => selector
+        }
+      )
+
+    Pythonx.decode(result)
+  end
+
+  @doc """
+  Gets the CSS properties for a specific selector if it exists, or returns nil.
+
+  ## Parameters
+
+    * `css_code` - The CSS code as a string
+    * `selector` - The CSS selector to check for
+
+  ## Examples
+
+      iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, ".header")
+      %{"color" => "blue", "font-size" => "16px"}
+
+      iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, "#nonexistent")
+      nil
+  """
+  def get_selector_properties(css_code, selector)
+      when is_binary(css_code) and is_binary(selector) do
+    {result, _globals} =
+      Pythonx.eval(
+        """
+        import tinycss2
+        from css_tools.parser import parse_stylesheet, get_selector_text, get_rule_declarations
+
+        if isinstance(selector, bytes):
+            selector = selector.decode('utf-8')
+
+        rules = parse_stylesheet(css_code)
+        properties = None
+
+        for rule in rules:
+            if rule.type == "qualified-rule":
+                rule_selector = get_selector_text(rule)
+                if rule_selector == selector:
+                    declarations = get_rule_declarations(rule)
+                    properties = {}
+
+                    for decl in declarations:
+                        if decl.type == "declaration":
+                            value = tinycss2.serialize(decl.value).strip()
+                            properties[decl.name] = value
+
+                    break
+
+        result = properties
+        result
+        """,
+        %{
+          "css_code" => css_code,
+          "selector" => selector
+        }
+      )
+
+    Pythonx.decode(result)
+  end
 end
