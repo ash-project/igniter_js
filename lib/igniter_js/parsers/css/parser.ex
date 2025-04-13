@@ -154,7 +154,7 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   @doc """
   Beautifies a CSS stylesheet by adding proper indentation and formatting.
-
+  We recommend using `IgniterJs.Parsers.CSS.Formatter` module instead.
   ## Examples
 
       iex> IgniterJs.Parsers.CSS.Parser.beautify(css_code)

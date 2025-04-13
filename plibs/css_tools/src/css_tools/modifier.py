@@ -184,10 +184,10 @@ def remove_selector(css: Union[str, bytes], selector: str) -> str:
 
 def modify_property_value(
     css: Union[str, bytes],
-    selector: str,
-    property_name: str,
-    new_value: str,
-    important: bool = None
+    selector: Union[str, bytes],
+    property_name: Union[str, bytes],
+    new_value: Union[str, bytes],
+    important: Optional[bool] = None
 ) -> str:
     """
     Modify the value of a CSS property for a specific selector.
@@ -202,8 +202,15 @@ def modify_property_value(
     Returns:
         Modified CSS as a string
     """
+    # Convert all byte parameters to strings
     if isinstance(css, bytes):
         css = css.decode('utf-8')
+    if isinstance(selector, bytes):
+        selector = selector.decode('utf-8')
+    if isinstance(property_name, bytes):
+        property_name = property_name.decode('utf-8')
+    if isinstance(new_value, bytes):
+        new_value = new_value.decode('utf-8')
 
     rules = parse_stylesheet(css)
     modified_css = ""
@@ -261,7 +268,7 @@ def modify_property_value(
 
 def add_prefix_to_property(
     css: Union[str, bytes],
-    property_name: str,
+    property_name: Union[str, bytes],
     prefixes: List[str]
 ) -> str:
     """
@@ -276,7 +283,9 @@ def add_prefix_to_property(
         Modified CSS as a string
     """
     if isinstance(css, bytes):
-        css = css.decode('utf-8')
+            css = css.decode('utf-8')
+    if isinstance(property_name, bytes):
+        property_name = property_name.decode('utf-8')
 
     rules = parse_stylesheet(css)
     modified_css = ""

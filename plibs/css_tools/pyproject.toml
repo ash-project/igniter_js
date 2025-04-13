@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "css_tools"
 version = "0.1.0"
-authors = [{ name = "Your Name", email = "your.email@example.com" }]
+authors = [{ name = "Shahryar Tavakkoli", email = "shahryar@mishka.tools" }]
 description = "CSS manipulation tools for Elixir integration"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,5 +17,5 @@ classifiers = [
 dependencies = ["tinycss2>=1.4.0"]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/css_tools"
-"Bug Tracker" = "https://github.com/yourusername/css_tools/issues"
+"Homepage" = "https://github.com/ash-project/igniter_js"
+"Bug Tracker" = "https://github.com/ash-project/igniter_js/issues"
