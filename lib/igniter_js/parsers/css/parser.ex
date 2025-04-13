@@ -609,4 +609,162 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
     Pythonx.decode(result)
   end
+
+  @doc """
+  Adds an @import rule to the CSS if it doesn't already exist.
+
+  ## Parameters
+
+    * `css_code` - The CSS code as a string
+    * `import_url` - The URL or path to import (without quotes)
+    * `media_query` - Optional media query to apply to the import (e.g., "screen and (max-width: 768px)")
+
+  ## Examples
+
+      iex> IgniterJs.Parsers.CSS.Parser.add_import(css_code, "styles.css")
+      "css with @import url('styles.css') added"
+
+      iex> IgniterJs.Parsers.CSS.Parser.add_import(css_code, "mobile.css", "screen and (max-width: 768px)")
+      "css with @import url('mobile.css') screen and (max-width: 768px) added"
+  """
+  def add_import(css_code, import_url, media_query \\ nil)
+      when is_binary(css_code) and is_binary(import_url) and
+             (is_binary(media_query) or is_nil(media_query)) do
+    {result, _globals} =
+      Pythonx.eval(
+        """
+        import tinycss2
+        from css_tools.parser import parse_stylesheet
+
+        # Ensure we're working with strings
+        if isinstance(css_code, bytes):
+            css_code = css_code.decode('utf-8')
+        if isinstance(import_url, bytes):
+            import_url = import_url.decode('utf-8')
+
+        media_query_str = ""
+        if media_query is not None:
+            if isinstance(media_query, bytes):
+                media_query = media_query.decode('utf-8')
+            media_query_str = f" {media_query}"
+
+        # Format the import rule
+        if import_url.startswith(("http://", "https://", "/")):
+            # URLs need to be quoted
+            new_import = f"@import url('{import_url}'){media_query_str};"
+        else:
+            # Relative paths can be with or without quotes
+            new_import = f"@import '{import_url}'{media_query_str};"
+
+        rules = parse_stylesheet(css_code)
+
+        # Check if the import already exists
+        exists = False
+        for rule in rules:
+            if rule.type == "at-rule" and rule.at_keyword.lower() == "import":
+                if import_url in tinycss2.serialize(rule.prelude):
+                    exists = True
+                    break
+
+        if exists:
+            # Don't add duplicate import
+            modified_css = css_code
+        else:
+            # Add new import at the beginning - imports must come before other rules
+            has_imports = any(rule.type == "at-rule" and rule.at_keyword.lower() == "import" for rule in rules)
+
+            if has_imports:
+                # Add after the last import
+                modified_parts = []
+                last_import_index = -1
+
+                for i, rule in enumerate(rules):
+                    if rule.type == "at-rule" and rule.at_keyword.lower() == "import":
+                        last_import_index = i
+
+                # Add all rules up to the last import
+                for i, rule in enumerate(rules):
+                    part = tinycss2.serialize([rule])
+                    # Ensure this is a string
+                    if isinstance(part, bytes):
+                        part = part.decode('utf-8')
+                    modified_parts.append(part)
+
+                    if i == last_import_index:
+                        # Add the new import after the last existing import
+                        modified_parts.append(f"\\n{new_import}\\n")
+
+                modified_css = "".join(modified_parts)
+            else:
+                # No existing imports, add at the beginning
+                # Make sure to convert any bytes to strings
+                if isinstance(css_code, bytes):
+                    css_code = css_code.decode('utf-8')
+                modified_css = f"{new_import}\\n{css_code}"
+
+        # Final check to ensure we return a string, not bytes
+        if isinstance(modified_css, bytes):
+            modified_css = modified_css.decode('utf-8')
+
+        result = modified_css.strip()
+        result
+        """,
+        %{
+          "css_code" => css_code,
+          "import_url" => import_url,
+          "media_query" => media_query
+        }
+      )
+
+    Pythonx.decode(result)
+  end
+
+  @doc """
+  Removes a specific @import rule from the CSS.
+
+  ## Parameters
+
+    * `css_code` - The CSS code as a string
+    * `import_url` - The URL or path to remove (matches partial URL)
+
+  ## Examples
+
+      iex> IgniterJs.Parsers.CSS.Parser.remove_import(css_code, "styles.css")
+      "css with @import url('styles.css') removed"
+  """
+  def remove_import(css_code, import_url) when is_binary(css_code) and is_binary(import_url) do
+    {result, _globals} =
+      Pythonx.eval(
+        """
+        import tinycss2
+        from css_tools.parser import parse_stylesheet
+
+        if isinstance(import_url, bytes):
+            import_url = import_url.decode('utf-8')
+
+        rules = parse_stylesheet(css_code)
+        modified_css = ""
+
+        for rule in rules:
+            if rule.type == "at-rule" and rule.at_keyword.lower() == "import":
+                # Check if this import contains the URL we want to remove
+                serialized = tinycss2.serialize(rule.prelude)
+                if import_url not in serialized:
+                    # Keep imports that don't match
+                    modified_css += tinycss2.serialize([rule])
+            else:
+                # Keep all other rules
+                modified_css += tinycss2.serialize([rule])
+
+        result = modified_css.strip()
+        result
+        """,
+        %{
+          "css_code" => css_code,
+          "import_url" => import_url
+        }
+      )
+
+    Pythonx.decode(result)
+  end
 end
