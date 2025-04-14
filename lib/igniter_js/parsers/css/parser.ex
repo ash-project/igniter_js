@@ -356,36 +356,67 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.modify_property(css_code, ".header", "color", "blue")
-      "updated css with .header color: blue"
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.modify_property(css_code, ".header", "color", "blue")
+  "updated css with .header color: blue"
+  ```
   """
-  def modify_property(css_code, selector, property_name, new_value, important \\ false)
-      when is_binary(css_code) and is_binary(selector) and is_binary(property_name) and
-             is_binary(new_value) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.modifier import modify_property_value
-
-        result = modify_property_value(
-            css_code,
-            selector,
-            property_name,
-            new_value,
-            important
-        )
-        result
-        """,
-        %{
-          "css_code" => css_code,
-          "selector" => selector,
-          "property_name" => property_name,
-          "new_value" => new_value,
-          "important" => important
-        }
+  def modify_property(
+        file_path_or_content,
+        selector,
+        property_name,
+        new_value,
+        important,
+        type \\ :content
       )
+      when is_boolean(important) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.modifier import modify_property_value
 
-    Pythonx.decode(result)
+            try:
+              modified_css = modify_property_value(
+                  css_code,
+                  selector,
+                  property_name,
+                  new_value,
+                  important
+              )
+
+              result = {"status": "ok", "result": modified_css}
+
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{
+              "css_code" => file_content,
+              "selector" => selector,
+              "property_name" => property_name,
+              "new_value" => new_value,
+              "important" => important
+            }
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => analyzed_css} ->
+            {:ok, __ENV__.function, analyzed_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """

@@ -781,4 +781,170 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert result == ""
     end
   end
+
+  describe "modify_property/5" do
+    test "modifies existing property value for selector" do
+      # Given: CSS with a selector and property
+      css_code = """
+      .header {
+        color: red;
+        font-size: 16px;
+      }
+      """
+
+      # When: Modifying the color property
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", false)
+
+      # Then: The property value should be updated
+      assert String.contains?(result, "color: blue")
+      assert !String.contains?(result, "color: red")
+      # Other properties should remain unchanged
+      assert String.contains?(result, "font-size: 16px")
+    end
+
+    test "adds property if it doesn't exist for the selector" do
+      # Given: CSS with a selector but without the target property
+      css_code = """
+      .header {
+        font-size: 16px;
+      }
+      """
+
+      # When: Modifying a non-existent property
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", false)
+
+      # Then: The new property should be added
+      assert String.contains?(result, "color: blue")
+      # Existing properties should be preserved
+      assert String.contains?(result, "font-size: 16px")
+    end
+
+    test "adds selector and property if selector doesn't exist" do
+      # Given: CSS without the target selector
+      css_code = """
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Modifying a property for a non-existent selector
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", false)
+
+      # Then: The new selector and property should be added
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+      # Existing content should be preserved
+      assert String.contains?(result, ".content")
+      assert String.contains?(result, "padding: 20px")
+    end
+
+    test "adds !important flag when specified" do
+      # Given: CSS with a selector and property
+      css_code = """
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Modifying property with important flag
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", true)
+
+      # Then: The property should be updated with !important
+      assert String.contains?(result, "color: blue!important;")
+    end
+
+    test "removes !important flag when not specified" do
+      # Given: CSS with a property having !important flag
+      css_code = """
+      .header {
+        color: red !important;
+      }
+      """
+
+      # When: Modifying property without important flag
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", false)
+
+      # Then: The property should be updated without !important
+      assert String.contains?(result, "color: blue")
+      assert !String.contains?(result, "!important")
+    end
+
+    test "handles selectors with pseudo-classes" do
+      # Given: CSS with pseudo-class selectors
+      css_code = """
+      .button:hover {
+        background-color: red;
+      }
+      """
+
+      # When: Modifying property for a selector with pseudo-class
+      {:ok, _, result} =
+        Parser.modify_property(css_code, ".button:hover", "background-color", "blue", false)
+
+      # Then: The property should be updated for the correct selector
+      assert String.contains?(result, ".button:hover")
+      assert String.contains?(result, "background-color: blue")
+    end
+
+    test "handles complex selectors" do
+      # Given: CSS with complex selectors
+      css_code = """
+      .parent > .child {
+        color: red;
+      }
+      """
+
+      # When: Modifying property for a complex selector
+      {:ok, _, result} =
+        Parser.modify_property(css_code, ".parent > .child", "color", "blue", false)
+
+      # Then: The property should be updated for the correct selector
+      assert String.contains?(result, ".parent > .child")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "preserves media queries when modifying properties inside them" do
+      # Given: CSS with media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          color: red;
+        }
+      }
+      """
+
+      # When: Modifying property inside media query
+      {:ok, _, result} = Parser.modify_property(css_code, ".mobile", "color", "blue", false)
+
+      # Then: The media query should be preserved and property updated
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, ".mobile")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Modifying property
+      {:ok, _, result} = Parser.modify_property(css_code, ".header", "color", "blue", false)
+
+      # Then: A new rule should be created
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = ".invalid { color: red; missing-closing-brace;"
+
+      # When: Modifying property
+      {:error, _, error_message} =
+        Parser.modify_property(css_code, ".invalid", "color", "blue", false)
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+  end
 end
