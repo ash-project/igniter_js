@@ -149,7 +149,7 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
       # Then: CSS should remain unchanged
-      assert Parser.beautify(result) == Parser.beautify(css_code)
+      assert elem(Parser.beautify(result), 2) == elem(Parser.beautify(css_code), 2)
     end
 
     test "handles multiple occurrences of the property" do
@@ -192,7 +192,7 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
       # Then: CSS should remain unchanged
-      assert Parser.beautify(result) == Parser.beautify(css_code)
+      assert elem(Parser.beautify(result), 2) == elem(Parser.beautify(css_code), 2)
     end
 
     test "preserves !important flags" do
