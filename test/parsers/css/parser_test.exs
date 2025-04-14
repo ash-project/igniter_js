@@ -2068,4 +2068,122 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "sort_properties/1" do
+    test "sorts properties alphabetically within each rule" do
+      # Given: CSS with unsorted properties
+      css_code = """
+      .header {
+        color: blue;
+        background: white;
+        font-size: 16px;
+      }
+
+      .content {
+        padding: 20px;
+        margin: 10px;
+        border: 1px solid black;
+      }
+      """
+
+      # When: Sorting properties
+      {:ok, _, result} = Parser.sort_properties(css_code)
+
+      # Then: Properties should be sorted alphabetically
+      assert String.contains?(
+               result,
+               ".header {\n    background: white;\n    color: blue;\n    font-size: 16px;\n}"
+             )
+
+      assert String.contains?(
+               result,
+               ".content {\n    border: 1px solid black;\n    margin: 10px;\n    padding: 20px;\n}"
+             )
+    end
+
+    test "preserves comments within rules" do
+      # Given: CSS with comments
+      css_code = """
+      .header {
+        /* Header styles */
+        color: blue;
+        background: white;
+        /* Font settings */
+        font-size: 16px;
+      }
+      """
+
+      # When: Sorting properties
+      {:ok, _, result} = Parser.sort_properties(css_code)
+      # Then: Comments should be preserved
+      assert String.contains?(result, "/*  Header styles  */")
+      assert String.contains?(result, "/*  Font settings  */")
+    end
+
+    test "preserves !important flags" do
+      # Given: CSS with !important properties
+      css_code = """
+      .important {
+        color: blue !important;
+        background: white;
+        font-size: 16px !important;
+      }
+      """
+
+      # When: Sorting properties
+      {:ok, _, result} = Parser.sort_properties(css_code)
+
+      # Then: !important flags should be preserved
+      assert String.contains?(
+               result,
+               ".important {\n    background: white;\n    color: blue !important;\n    font-size: 16px !important;\n}"
+             )
+    end
+
+    test "handles media queries" do
+      # Given: CSS with media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .responsive {
+          color: blue;
+          background: white;
+          font-size: 16px;
+        }
+      }
+      """
+
+      # When: Sorting properties
+      {:ok, _, result} = Parser.sort_properties(css_code)
+
+      # Then: Media query structure should be preserved and properties sorted
+      assert String.contains?(result, "@media (max-width: 768px) {")
+
+      assert String.contains?(
+               result,
+               ".responsive {\n    color: blue;\n    background: white;\n    font-size: 16px;"
+             )
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Sorting properties
+      {:ok, _, result} = Parser.sort_properties(css_code)
+
+      # Then: Should return empty string
+      assert result == ""
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = "invalid css"
+
+      # When: Sorting properties
+      result = Parser.sort_properties(css_code)
+
+      # Then: Should return error
+      assert {:error, _, _} = result
+    end
+  end
 end
