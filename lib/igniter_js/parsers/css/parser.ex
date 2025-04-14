@@ -424,8 +424,10 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.merge_stylesheets([css_code1, css_code2])
-      "merged css"
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.merge_stylesheets([css_code1, css_code2])
+  "merged css"
+  ```
   """
   def merge_stylesheets(css_list) when is_list(css_list) do
     {result, _globals} =
@@ -433,13 +435,28 @@ defmodule IgniterJs.Parsers.CSS.Parser do
         """
         from css_tools.modifier import merge_stylesheets
 
-        result = merge_stylesheets(css_list)
+        try:
+          modified_css = merge_stylesheets(css_list)
+          result = {"status": "ok", "result": modified_css}
+
+        except Exception as e:
+            # Return any errors in a structured format
+            result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
         result
         """,
         %{"css_list" => css_list}
       )
 
-    Pythonx.decode(result)
+    parsed_result = Pythonx.decode(result)
+
+    case parsed_result do
+      %{"status" => "ok", "result" => analyzed_css} ->
+        {:ok, __ENV__.function, analyzed_css}
+
+      %{"status" => "error", "message" => message} ->
+        {:error, __ENV__.function, message}
+    end
   end
 
   @doc """

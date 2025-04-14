@@ -947,4 +947,258 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "merge_stylesheets/1" do
+    test "merges multiple CSS stylesheets" do
+      # Given: Multiple CSS stylesheets
+      css_code1 = """
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+      """
+
+      css_code2 = """
+      .content {
+        padding: 20px;
+        margin: 10px;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: The result should contain all selectors and properties
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+      assert String.contains?(result, "font-size: 16px")
+      assert String.contains?(result, ".content")
+      assert String.contains?(result, "padding: 20px")
+      assert String.contains?(result, "margin: 10px")
+    end
+
+    test "removes duplicate selectors when merging" do
+      # Given: CSS stylesheets with duplicate selectors
+      css_code1 = """
+      .header {
+        color: blue;
+      }
+      """
+
+      css_code2 = """
+      .header {
+        font-size: 16px;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: The duplicate selectors should be merged
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+      assert String.contains?(result, "font-size: 16px")
+
+      # Count occurrences of .header - should only appear once
+      assert Regex.scan(~r/\.header\s*\{/, result) |> length() == 1
+    end
+
+    test "handles duplicate properties by keeping the last one" do
+      # Given: CSS stylesheets with duplicate properties
+      css_code1 = """
+      .header {
+        color: blue;
+      }
+      """
+
+      css_code2 = """
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: The last property value should be kept
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: red")
+      refute String.contains?(result, "color: blue")
+    end
+
+    test "preserves media queries when merging" do
+      # Given: CSS stylesheets with media queries
+      css_code1 = """
+      @media (max-width: 768px) {
+        .mobile {
+          color: blue;
+        }
+      }
+      """
+
+      css_code2 = """
+      @media (max-width: 768px) {
+        .mobile {
+          font-size: 14px;
+        }
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: Media queries should be preserved and properties merged
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, ".mobile")
+      assert String.contains?(result, "color: blue")
+      assert String.contains?(result, "font-size: 14px")
+    end
+
+    test "preserves @import rules" do
+      # Given: CSS stylesheets with @import rules
+      css_code1 = """
+      @import url('fonts.css');
+      .header {
+        font-family: 'Open Sans', sans-serif;
+      }
+      """
+
+      css_code2 = """
+      @import url('layout.css');
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: @import rules should be preserved
+      assert String.contains?(result, "@import url(\"fonts.css\");")
+      assert String.contains?(result, "@import url(\"layout.css\");")
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, ".content")
+    end
+
+    test "preserves !important declarations" do
+      # Given: CSS stylesheets with !important declarations
+      css_code1 = """
+      .header {
+        color: blue !important;
+      }
+      """
+
+      css_code2 = """
+      .content {
+        padding: 20px !important;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: !important declarations should be preserved
+      assert String.contains?(result, "color: blue !important")
+      assert String.contains?(result, "padding: 20px !important")
+    end
+
+    test "handles CSS with comments" do
+      # Given: CSS stylesheets with comments
+      css_code1 = """
+      /* Header styles */
+      .header {
+        color: blue;
+      }
+      """
+
+      css_code2 = """
+      /* Content styles */
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: Comments should be preserved
+      assert String.contains?(result, "/* Header styles */")
+      assert String.contains?(result, "/* Content styles */")
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, ".content")
+    end
+
+    test "handles empty CSS list" do
+      # Given: Empty CSS list
+      css_list = []
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets(css_list)
+
+      # Then: Result should be empty
+      assert result == "" or result == nil
+    end
+
+    test "handles list with a single stylesheet" do
+      # Given: CSS list with a single stylesheet
+      css_code = """
+      .header {
+        color: blue;
+      }
+      """
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code])
+
+      # Then: Result should be the same as the input
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles lists with empty stylesheets" do
+      # Given: CSS list with some empty stylesheets
+      css_code1 = ""
+
+      css_code2 = """
+      .header {
+        color: blue;
+      }
+      """
+
+      css_code3 = ""
+
+      # When: Merging the stylesheets
+      {:ok, _, result} = Parser.merge_stylesheets([css_code1, css_code2, css_code3])
+
+      # Then: Empty stylesheets should be ignored
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles invalid CSS" do
+      # Given: CSS list with some invalid CSS
+      css_code1 = """
+      .header {
+        color: blue;
+      }
+      """
+
+      css_code2 = ".invalid { color: red; missing-closing-brace;"
+
+      # When: Merging the stylesheets
+      result = Parser.merge_stylesheets([css_code1, css_code2])
+
+      # Then: Should either return an error or handle it gracefully
+      case result do
+        {:error, _, error_message} ->
+          assert is_binary(error_message)
+          assert String.contains?(error_message, "Failed to parse CSS")
+
+        {:ok, _, merged_css} ->
+          # If the function tries to handle invalid CSS gracefully, verify the valid parts are there
+          assert String.contains?(merged_css, ".header")
+          assert String.contains?(merged_css, "color: blue")
+      end
+    end
+  end
 end
