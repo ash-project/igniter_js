@@ -95,11 +95,25 @@ def extract_media_queries(css: Union[str, bytes]) -> Dict[str, List[Dict[str, An
 
     Returns:
         Dictionary mapping media query conditions to their rules
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
     """
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
+    # Validate CSS syntax before proceeding
+    # Check for unbalanced braces - a common CSS error
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
     rules = parse_stylesheet(css)
+
+    # Check for parse errors
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
+
     media_queries = {}
 
     for rule in rules:
@@ -111,72 +125,129 @@ def extract_media_queries(css: Union[str, bytes]) -> Dict[str, List[Dict[str, An
 
             # Parse the content of the media query
             if hasattr(rule, 'content') and rule.content:
-                inner_rules = tinycss2.parse_stylesheet(
-                    rule.content, skip_whitespace=False, skip_comments=False
-                )
+                try:
+                    inner_rules = tinycss2.parse_stylesheet(
+                        rule.content, skip_whitespace=False, skip_comments=False
+                    )
 
-                for inner_rule in inner_rules:
-                    if inner_rule.type == "qualified-rule":
-                        selector = get_selector_text(inner_rule)
-                        declarations = get_rule_declarations(inner_rule)
+                    # Check for parse errors in inner rules
+                    for inner_rule in inner_rules:
+                        if hasattr(inner_rule, 'type') and inner_rule.type == 'error':
+                            raise Exception(f"CSS parse error in media query: {getattr(inner_rule, 'message', 'Unknown error')}")
 
-                        props = {}
-                        for decl in declarations:
-                            if decl.type == "declaration":
-                                props[decl.name] = tinycss2.serialize(decl.value).strip()
+                    for inner_rule in inner_rules:
+                        if inner_rule.type == "qualified-rule":
+                            selector = get_selector_text(inner_rule)
+                            declarations = get_rule_declarations(inner_rule)
 
-                        media_queries[condition].append({
-                            "selector": selector,
-                            "properties": props
-                        })
+                            props = {}
+                            for decl in declarations:
+                                if decl.type == "declaration":
+                                    props[decl.name] = tinycss2.serialize(decl.value).strip()
+
+                            media_queries[condition].append({
+                                "selector": selector,
+                                "properties": props
+                            })
+                except Exception as e:
+                    raise Exception(f"Error parsing media query content: {str(e)}")
 
     return media_queries
 
 
-def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
+def validate_css(css: Union[str, bytes]) -> str:
     """
-    Extract all CSS animations and keyframes.
+    Validates CSS syntax and returns decoded string.
 
     Args:
         css: The CSS code as string or bytes
 
     Returns:
-        Dictionary mapping animation names to their keyframes
+        Decoded CSS string
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
     """
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
-    rules = parse_stylesheet(css)
-    animations = {}
+    # Check for unbalanced braces - a common CSS error
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
+    return css
+
+
+def check_parse_errors(rules, context=""):
+    """
+    Check for parse errors in a list of CSS rules.
+
+    Args:
+        rules: List of CSS rules
+        context: Optional context description for error messages
+
+    Raises:
+        Exception: If any parse errors are found
+    """
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            prefix = f"CSS parse error {context}: " if context else "CSS parse error: "
+            raise Exception(f"{prefix}{getattr(rule, 'message', 'Unknown error')}")
+
+
+def extract_keyframes(rule):
+    """
+    Extract keyframes from a @keyframes rule.
+
+    Args:
+        rule: The @keyframes at-rule
+
+    Returns:
+        Dictionary mapping percentages to property dictionaries
+    """
+    keyframes = {}
+
+    if not (hasattr(rule, 'content') and rule.content):
+        return keyframes
+
+    try:
+        keyframe_rules = tinycss2.parse_stylesheet(
+            rule.content, skip_whitespace=False, skip_comments=False
+        )
+
+        # Check for parse errors in keyframe rules
+        check_parse_errors(keyframe_rules, "in @keyframes")
+
+        for keyframe_rule in keyframe_rules:
+            if keyframe_rule.type == "qualified-rule":
+                # The "selector" for keyframes is the percentage or keywords (from/to)
+                percentage = get_selector_text(keyframe_rule)
+                declarations = get_rule_declarations(keyframe_rule)
+
+                props = {}
+                for decl in declarations:
+                    if decl.type == "declaration":
+                        props[decl.name] = tinycss2.serialize(decl.value).strip()
+
+                keyframes[percentage] = props
+    except Exception as e:
+        raise Exception(f"Error parsing @keyframes content: {str(e)}")
+
+    return keyframes
+
+
+def find_animation_usage(rules):
+    """
+    Find all elements using animations.
+
+    Args:
+        rules: List of CSS rules
+
+    Returns:
+        Dictionary mapping animation names to lists of selectors using them
+    """
     animation_usage = {}
 
-    # First pass: Find all @keyframes rules
-    for rule in rules:
-        if rule.type == "at-rule" and rule.lower_at_keyword == "keyframes":
-            animation_name = tinycss2.serialize(rule.prelude).strip()
-
-            keyframes = {}
-            if hasattr(rule, 'content') and rule.content:
-                keyframe_rules = tinycss2.parse_stylesheet(
-                    rule.content, skip_whitespace=False, skip_comments=False
-                )
-
-                for keyframe_rule in keyframe_rules:
-                    if keyframe_rule.type == "qualified-rule":
-                        # The "selector" for keyframes is the percentage or keywords (from/to)
-                        percentage = get_selector_text(keyframe_rule)
-                        declarations = get_rule_declarations(keyframe_rule)
-
-                        props = {}
-                        for decl in declarations:
-                            if decl.type == "declaration":
-                                props[decl.name] = tinycss2.serialize(decl.value).strip()
-
-                        keyframes[percentage] = props
-
-            animations[animation_name] = keyframes
-
-    # Second pass: Find all elements using animations
     for rule in rules:
         if rule.type == "qualified-rule":
             selector = get_selector_text(rule)
@@ -191,6 +262,42 @@ def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
                     if animation_name not in animation_usage:
                         animation_usage[animation_name] = []
                     animation_usage[animation_name].append(selector)
+
+    return animation_usage
+
+
+def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
+    """
+    Extract all CSS animations and keyframes.
+
+    Args:
+        css: The CSS code as string or bytes
+
+    Returns:
+        Dictionary mapping animation names to their keyframes
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
+    """
+    # Validate and decode CSS
+    css = validate_css(css)
+
+    # Parse CSS
+    rules = parse_stylesheet(css)
+
+    # Check for parse errors
+    check_parse_errors(rules)
+
+    animations = {}
+
+    # First pass: Find all @keyframes rules
+    for rule in rules:
+        if rule.type == "at-rule" and rule.lower_at_keyword == "keyframes":
+            animation_name = tinycss2.serialize(rule.prelude).strip()
+            animations[animation_name] = extract_keyframes(rule)
+
+    # Second pass: Find all elements using animations
+    animation_usage = find_animation_usage(rules)
 
     # Combine the results
     result = {}

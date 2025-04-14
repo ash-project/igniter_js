@@ -1445,4 +1445,294 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "extract_media_queries/1" do
+    test "extracts basic media queries and their contents" do
+      # Given: CSS with simple media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .header {
+          font-size: 14px;
+        }
+        .content {
+          padding: 10px;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: The media query and its contents should be extracted
+      assert is_map(result)
+      assert Map.has_key?(result, "(max-width: 768px)")
+
+      mobile_rules = result["(max-width: 768px)"]
+      assert is_list(mobile_rules)
+      assert length(mobile_rules) == 2
+
+      # Verify first selector properties
+      header_rule = Enum.find(mobile_rules, fn rule -> rule["selector"] == ".header" end)
+      assert header_rule != nil
+      assert header_rule["properties"]["font-size"] == "14px"
+
+      # Verify second selector properties
+      content_rule = Enum.find(mobile_rules, fn rule -> rule["selector"] == ".content" end)
+      assert content_rule != nil
+      assert content_rule["properties"]["padding"] == "10px"
+    end
+
+    test "extracts multiple media queries" do
+      # Given: CSS with multiple media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          display: block;
+        }
+      }
+
+      @media (min-width: 1200px) {
+        .desktop {
+          margin: 0 auto;
+        }
+      }
+
+      @media print {
+        .no-print {
+          display: none;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: All media queries should be extracted
+      assert Map.has_key?(result, "(max-width: 768px)")
+      assert Map.has_key?(result, "(min-width: 1200px)")
+      assert Map.has_key?(result, "print")
+
+      # Verify contents of each media query
+      assert Enum.find(result["(max-width: 768px)"], fn rule -> rule["selector"] == ".mobile" end)[
+               "properties"
+             ]["display"] == "block"
+
+      assert Enum.find(result["(min-width: 1200px)"], fn rule ->
+               rule["selector"] == ".desktop"
+             end)["properties"]["margin"] == "0 auto"
+
+      assert Enum.find(result["print"], fn rule -> rule["selector"] == ".no-print" end)[
+               "properties"
+             ]["display"] == "none"
+    end
+
+    test "extracts media queries with multiple properties" do
+      # Given: CSS with media queries containing selectors with multiple properties
+      css_code = """
+      @media (max-width: 768px) {
+        .header {
+          font-size: 14px;
+          color: #333;
+          padding: 5px;
+          margin: 10px;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: All properties should be extracted
+      mobile_header =
+        Enum.find(result["(max-width: 768px)"], fn rule -> rule["selector"] == ".header" end)
+
+      assert mobile_header["properties"]["font-size"] == "14px"
+      assert mobile_header["properties"]["color"] == "#333"
+      assert mobile_header["properties"]["padding"] == "5px"
+      assert mobile_header["properties"]["margin"] == "10px"
+    end
+
+    test "extracts media queries with complex selectors" do
+      # Given: CSS with media queries containing complex selectors
+      css_code = """
+      @media (max-width: 768px) {
+        .parent > .child {
+          color: red;
+        }
+
+        .sibling + .adjacent {
+          margin-left: 10px;
+        }
+
+        ul li:hover {
+          background-color: #f0f0f0;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Complex selectors should be correctly extracted
+      mobile_rules = result["(max-width: 768px)"]
+
+      assert Enum.find(mobile_rules, fn rule -> rule["selector"] == ".parent > .child" end)[
+               "properties"
+             ]["color"] == "red"
+
+      assert Enum.find(mobile_rules, fn rule -> rule["selector"] == ".sibling + .adjacent" end)[
+               "properties"
+             ]["margin-left"] == "10px"
+
+      assert Enum.find(mobile_rules, fn rule -> rule["selector"] == "ul li:hover" end)[
+               "properties"
+             ]["background-color"] == "#f0f0f0"
+    end
+
+    test "extracts media queries with complex conditions" do
+      # Given: CSS with media queries having complex conditions
+      css_code = """
+      @media (min-width: 768px) and (max-width: 1200px) {
+        .tablet {
+          display: block;
+        }
+      }
+
+      @media screen and (orientation: landscape) {
+        .landscape {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 768px), (min-width: 1400px) {
+        .extremes {
+          font-size: 18px;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Complex media query conditions should be correctly extracted
+      assert Map.has_key?(result, "(min-width: 768px) and (max-width: 1200px)")
+      assert Map.has_key?(result, "screen and (orientation: landscape)")
+      assert Map.has_key?(result, "(max-width: 768px), (min-width: 1400px)")
+
+      assert Enum.find(result["(min-width: 768px) and (max-width: 1200px)"], fn rule ->
+               rule["selector"] == ".tablet"
+             end)["properties"]["display"] == "block"
+
+      assert Enum.find(result["screen and (orientation: landscape)"], fn rule ->
+               rule["selector"] == ".landscape"
+             end)["properties"]["width"] == "100%"
+
+      assert Enum.find(result["(max-width: 768px), (min-width: 1400px)"], fn rule ->
+               rule["selector"] == ".extremes"
+             end)["properties"]["font-size"] == "18px"
+    end
+
+    test "handles CSS with no media queries" do
+      # Given: CSS without any media queries
+      css_code = """
+      .header {
+        color: blue;
+      }
+
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Result should be an empty map
+      assert result == %{}
+    end
+
+    test "handles nested media queries" do
+      # Given: CSS with nested media queries (if supported)
+      css_code = """
+      @media print {
+        .document {
+          color: black;
+        }
+
+        @media (max-width: 768px) {
+          .document {
+            font-size: 12px;
+          }
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Either nested media queries are extracted separately or combined
+      # Note: How nested media queries are handled depends on the implementation
+      assert Map.has_key?(result, "print")
+      # Depending on implementation, might have nested query as:
+      # - A separate entry
+      # - Combined with parent (e.g., "print and (max-width: 768px)")
+      # - Ignored (only parent is extracted)
+
+      # Test for the guaranteed parent media query content
+      assert Enum.find(result["print"], fn rule -> rule["selector"] == ".document" end)[
+               "properties"
+             ]["color"] == "black"
+    end
+
+    test "extracts empty media queries" do
+      # Given: CSS with empty media queries
+      css_code = """
+      @media (max-width: 768px) {
+        /* Empty media query */
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Empty media queries should be extracted with empty content
+      assert Map.has_key?(result, "(max-width: 768px)")
+      assert result["(max-width: 768px)"] == []
+    end
+
+    test "handles CSS with comments in media queries" do
+      # Given: CSS with comments inside media queries
+      css_code = """
+      @media (max-width: 768px) {
+        /* Mobile styles */
+        .header {
+          /* Smaller font on mobile */
+          font-size: 14px;
+        }
+      }
+      """
+
+      # When: Extracting media queries
+      {:ok, _, result} = Parser.extract_media_queries(css_code)
+
+      # Then: Comments should be ignored and content correctly extracted
+      assert Map.has_key?(result, "(max-width: 768px)")
+
+      assert Enum.find(result["(max-width: 768px)"], fn rule -> rule["selector"] == ".header" end)[
+               "properties"
+             ]["font-size"] == "14px"
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = "@media (max-width: 768px) { .invalid { color: red; missing-closing-brace; }"
+
+      # When: Extracting media queries
+      {:error, _, error_message} = Parser.extract_media_queries(css_code)
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+  end
 end

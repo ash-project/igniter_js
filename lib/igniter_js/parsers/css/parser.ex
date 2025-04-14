@@ -511,29 +511,53 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.extract_media_queries(css_code)
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.extract_media_queries(css_code)
+  %{
+    "(max-width: 768px)" => [
       %{
-        "(max-width: 768px)" => [
-          %{
-            "selector" => ".header",
-            "properties" => %{"font-size" => "14px"}
-          }
-        ]
+        "selector" => ".header",
+        "properties" => %{"font-size" => "14px"}
       }
+    ]
+  }
+  ```
   """
-  def extract_media_queries(css_code) when is_binary(css_code) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.extractor import extract_media_queries
+  def extract_media_queries(file_path_or_content, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.extractor import extract_media_queries
 
-        result = extract_media_queries(css_code)
-        result
-        """,
-        %{"css_code" => css_code}
-      )
+            try:
+                modified_css = extract_media_queries(css_code)
+                result = {"status": "ok", "result": modified_css}
 
-    Pythonx.decode(result)
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{"css_code" => file_content}
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => analyzed_css} ->
+            {:ok, __ENV__.function, analyzed_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """
