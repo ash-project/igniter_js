@@ -13,9 +13,10 @@ defmodule IgniterJs.Parsers.CSS.Parser do
   If the class doesn't exist, it creates it.
 
   ## Examples
-
-      iex> IgniterJs.Parsers.CSS.Parser.add_hide_scrollbar_property(css_code)
-      updated css with .hide-scrollbar having display: none
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.add_hide_scrollbar_property(css_code)
+  updated css with .hide-scrollbar having display: none
+  ```
   """
   def add_hide_scrollbar_property(file_path_or_content, type \\ :content) do
     call_nif_fn(
@@ -55,10 +56,10 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
         case parsed_result do
           %{"status" => "ok", "result" => modified_css} ->
-            {:ok, :add_hide_scrollbar_property, modified_css}
+            {:ok, __ENV__.function, modified_css}
 
           %{"status" => "error", "message" => message} ->
-            {:error, :add_hide_scrollbar_property, message}
+            {:error, __ENV__.function, message}
         end
       end,
       type
@@ -76,32 +77,57 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> prefixes = ["-webkit-", "-moz-", "-ms-"]
-      iex> IgniterJs.Parsers.CSS.Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
-      "updated css with vendor prefixes"
+  ```elixir
+  iex> prefixes = ["-webkit-", "-moz-", "-ms-"]
+  iex> IgniterJs.Parsers.CSS.Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+  "updated css with vendor prefixes"
+  ```
   """
-  def add_vendor_prefixes(css_code, property_name, prefixes)
-      when is_binary(css_code) and is_binary(property_name) and is_list(prefixes) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.modifier import add_prefix_to_property
+  def add_vendor_prefixes(file_path_or_content, property_name, prefixes, type \\ :content)
+      when is_list(prefixes) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.modifier import add_prefix_to_property
 
-        result = add_prefix_to_property(
-            css_code,
-            property_name,
-            prefixes
-        )
-        result
-        """,
-        %{
-          "css_code" => css_code,
-          "property_name" => property_name,
-          "prefixes" => prefixes
-        }
-      )
+            try:
+              modified_css = add_prefix_to_property(
+                  css_code,
+                  property_name,
+                  prefixes
+              )
 
-    Pythonx.decode(result)
+              result = {"status": "ok", "result": modified_css}
+
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{
+              "css_code" => file_content,
+              "property_name" => property_name,
+              "prefixes" => prefixes
+            }
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => modified_css} ->
+            {:ok, __ENV__.function, modified_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """
