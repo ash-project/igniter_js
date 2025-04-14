@@ -283,54 +283,85 @@ def add_prefix_to_property(
         Modified CSS as a string
     """
     if isinstance(css, bytes):
-            css = css.decode('utf-8')
+        css = css.decode('utf-8')
     if isinstance(property_name, bytes):
         property_name = property_name.decode('utf-8')
 
     rules = parse_stylesheet(css)
     modified_css = ""
 
-    for rule in rules:
-        if rule.type == "qualified-rule":
-            rule_selector = get_selector_text(rule)
-            declarations = get_rule_declarations(rule)
+    def process_declarations(declarations):
+        """Helper function to process declarations and add prefixes"""
+        new_declarations = []
+        for decl in declarations:
+            new_declarations.append(decl)
+            if decl.type == "declaration" and decl.name == property_name:
+                # Add prefixed versions before the standard property
+                for prefix in prefixes:
+                    prefixed_prop = tinycss2.ast.Declaration(
+                        name=f"{prefix}{property_name}",
+                        value=decl.value,  # Use the same value as the original property
+                        important=decl.important,
+                        line=0,
+                        column=0,
+                        lower_name=f"{prefix}{property_name}".lower(),
+                    )
+                    # Insert prefixed property before the original
+                    new_declarations.insert(len(new_declarations) - 1, prefixed_prop)
+                    # Add whitespace between properties
+                    new_declarations.insert(
+                        len(new_declarations) - 1,
+                        tinycss2.ast.WhitespaceToken(line=0, column=0, value='\n    ')
+                    )
+        return new_declarations
 
-            # Look for the property to prefix
-            new_declarations = []
-            for decl in declarations:
-                new_declarations.append(decl)
-                if decl.type == "declaration" and decl.name == property_name:
-                    # Add prefixed versions before the standard property
-                    value = tinycss2.serialize(decl.value)
-                    for prefix in prefixes:
-                        prefixed_prop = tinycss2.ast.Declaration(
-                            name=f"{prefix}{property_name}",
-                            value=decl.value,  # Use the same value as the original property
-                            important=decl.important,
-                            line=0,
-                            column=0,
-                            lower_name=f"{prefix}{property_name}".lower(),
-                        )
-                        # Insert prefixed property before the original
-                        new_declarations.insert(len(new_declarations) - 1, prefixed_prop)
-                        # Add whitespace between properties
-                        new_declarations.insert(
-                            len(new_declarations) - 1,
-                            tinycss2.ast.WhitespaceToken(line=0, column=0, value='\n    ')
-                        )
+    def process_rules(rules_list, indent_level=0):
+        """Recursively process rules, handling nested at-rules"""
+        result = ""
+        indent = "    " * indent_level
 
-            # Format and add the rule to the result
-            serialized_content = tinycss2.serialize(new_declarations).strip()
-            serialized_content = "\n".join("    " + line.strip() for line in serialized_content.splitlines() if line.strip())
-            formatted_rule = f"{rule_selector} {{\n{serialized_content}\n}}\n"
-            modified_css += formatted_rule
+        for rule in rules_list:
+            if rule.type == "qualified-rule":
+                # Regular CSS rule
+                rule_selector = get_selector_text(rule)
+                declarations = get_rule_declarations(rule)
 
-        else:
-            # Keep other rules as they are
-            modified_css += tinycss2.serialize([rule])
+                # Process declarations to add prefixes
+                new_declarations = process_declarations(declarations)
+
+                # Format and add the rule to the result
+                serialized_content = tinycss2.serialize(new_declarations).strip()
+                serialized_content = "\n".join(indent + "    " + line.strip()
+                                              for line in serialized_content.splitlines() if line.strip())
+
+                formatted_rule = f"{indent}{rule_selector} {{\n{serialized_content}\n{indent}}}\n"
+                result += formatted_rule
+
+            elif rule.type == "at-rule" and rule.content is not None:
+                # Handle at-rules with blocks like @media
+                at_keyword = rule.at_keyword
+                prelude = tinycss2.serialize(rule.prelude).strip()
+
+                # Parse the content of the at-rule
+                content_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+
+                # Process the nested rules
+                inner_content = process_rules(content_rules, indent_level + 1)
+
+                # Format the at-rule
+                formatted_at_rule = f"{indent}@{at_keyword} {prelude} {{\n{inner_content}{indent}}}\n"
+                result += formatted_at_rule
+
+            else:
+                # Keep other rules as they are (at-rules without blocks, comments, etc.)
+                result += indent + tinycss2.serialize([rule])
+
+        return result
+
+    # Start processing from the top level
+    modified_css = process_rules(rules)
 
     return modified_css.strip()
-
 
 def merge_stylesheets(css_list: List[Union[str, bytes]]) -> str:
     """

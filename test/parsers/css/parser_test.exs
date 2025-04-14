@@ -124,7 +124,7 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       # When: Adding vendor prefixes
       prefixes = ["-webkit-", "-moz-", "-ms-"]
       {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
-      IO.puts(result)
+
       # Then: Prefixed properties should be added
       assert String.contains?(result, "-webkit-user-select: none")
       assert String.contains?(result, "-moz-user-select: none")
@@ -135,152 +135,152 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(result, "color: blue")
     end
 
-    # test "does nothing when property doesn't exist" do
-    #   # Given: CSS without the target property
-    #   css_code = """
-    #   .header {
-    #     color: blue;
-    #     font-size: 16px;
-    #   }
-    #   """
+    test "does nothing when property doesn't exist" do
+      # Given: CSS without the target property
+      css_code = """
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+      """
 
-    #   # When: Adding vendor prefixes for a non-existent property
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding vendor prefixes for a non-existent property
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: CSS should remain unchanged
-    #   assert result == css_code
-    # end
+      # Then: CSS should remain unchanged
+      assert Parser.beautify(result) == Parser.beautify(css_code)
+    end
 
-    # test "handles multiple occurrences of the property" do
-    #   # Given: CSS with multiple elements having the same property
-    #   css_code = """
-    #   .one {
-    #     user-select: none;
-    #   }
-    #   .two {
-    #     user-select: text;
-    #   }
-    #   """
+    test "handles multiple occurrences of the property" do
+      # Given: CSS with multiple elements having the same property
+      css_code = """
+      .one {
+        user-select: none;
+      }
+      .two {
+        user-select: text;
+      }
+      """
 
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: All occurrences should be prefixed
-    #   assert String.contains?(result, ".one {")
-    #   assert String.contains?(result, "-webkit-user-select: none")
-    #   assert String.contains?(result, "-moz-user-select: none")
-    #   assert String.contains?(result, "user-select: none")
+      # Then: All occurrences should be prefixed
+      assert String.contains?(result, ".one {")
+      assert String.contains?(result, "-webkit-user-select: none")
+      assert String.contains?(result, "-moz-user-select: none")
+      assert String.contains?(result, "user-select: none")
 
-    #   assert String.contains?(result, ".two {")
-    #   assert String.contains?(result, "-webkit-user-select: text")
-    #   assert String.contains?(result, "-moz-user-select: text")
-    #   assert String.contains?(result, "user-select: text")
-    # end
+      assert String.contains?(result, ".two {")
+      assert String.contains?(result, "-webkit-user-select: text")
+      assert String.contains?(result, "-moz-user-select: text")
+      assert String.contains?(result, "user-select: text")
+    end
 
-    # test "works with empty prefixes list" do
-    #   # Given: CSS with a property
-    #   css_code = """
-    #   .box {
-    #     user-select: none;
-    #   }
-    #   """
+    test "works with empty prefixes list" do
+      # Given: CSS with a property
+      css_code = """
+      .box {
+        user-select: none;
+      }
+      """
 
-    #   # When: Adding an empty list of prefixes
-    #   prefixes = []
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding an empty list of prefixes
+      prefixes = []
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: CSS should remain unchanged
-    #   assert result == css_code
-    # end
+      # Then: CSS should remain unchanged
+      assert Parser.beautify(result) == Parser.beautify(css_code)
+    end
 
-    # test "preserves !important flags" do
-    #   # Given: CSS with !important
-    #   css_code = """
-    #   .important {
-    #     user-select: none !important;
-    #   }
-    #   """
+    test "preserves !important flags" do
+      # Given: CSS with !important
+      css_code = """
+      .important {
+        user-select: none !important;
+      }
+      """
 
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: !important should be preserved in all versions
-    #   assert String.contains?(result, "-webkit-user-select: none !important")
-    #   assert String.contains?(result, "-moz-user-select: none !important")
-    #   assert String.contains?(result, "user-select: none !important")
-    # end
+      # Then: !important should be preserved in all versions
+      assert String.contains?(result, "-webkit-user-select: none !important")
+      assert String.contains?(result, "-moz-user-select: none !important")
+      assert String.contains?(result, "user-select: none !important")
+    end
 
-    # test "handles CSS with comments" do
-    #   # Given: CSS with comments
-    #   css_code = """
-    #   /* Header styles */
-    #   .header {
-    #     /* Prevent selection */
-    #     user-select: none;
-    #   }
-    #   """
+    test "handles CSS with comments" do
+      # Given: CSS with comments
+      css_code = """
+      /* Header styles */
+      .header {
+        /* Prevent selection */
+        user-select: none;
+      }
+      """
 
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: Comments should be preserved
-    #   assert String.contains?(result, "/* Header styles */")
-    #   assert String.contains?(result, "/* Prevent selection */")
-    #   assert String.contains?(result, "-webkit-user-select: none")
-    #   assert String.contains?(result, "-moz-user-select: none")
-    # end
+      # Then: Comments should be preserved
+      assert String.contains?(result, "/* Header styles */")
+      assert String.contains?(result, "/* Prevent selection */")
+      assert String.contains?(result, "-webkit-user-select: none")
+      assert String.contains?(result, "-moz-user-select: none")
+    end
 
-    # test "handles properties with multiple values" do
-    #   # Given: CSS with property having multiple values
-    #   css_code = """
-    #   .complex {
-    #     transform: translateX(10px) rotate(45deg);
-    #   }
-    #   """
+    test "handles properties with multiple values" do
+      # Given: CSS with property having multiple values
+      css_code = """
+      .complex {
+        transform: translateX(10px) rotate(45deg);
+      }
+      """
 
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "transform", prefixes)
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "transform", prefixes)
 
-    #   # Then: Complex values should be preserved
-    #   assert String.contains?(result, "-webkit-transform: translateX(10px) rotate(45deg)")
-    #   assert String.contains?(result, "-moz-transform: translateX(10px) rotate(45deg)")
-    #   assert String.contains?(result, "transform: translateX(10px) rotate(45deg)")
-    # end
+      # Then: Complex values should be preserved
+      assert String.contains?(result, "-webkit-transform: translateX(10px) rotate(45deg)")
+      assert String.contains?(result, "-moz-transform: translateX(10px) rotate(45deg)")
+      assert String.contains?(result, "transform: translateX(10px) rotate(45deg)")
+    end
 
-    # test "handles media queries" do
-    #   # Given: CSS with media queries
-    #   css_code = """
-    #   @media (max-width: 768px) {
-    #     .mobile {
-    #       user-select: none;
-    #     }
-    #   }
-    #   """
+    test "handles media queries" do
+      # Given: CSS with media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          user-select: none;
+        }
+      }
+      """
 
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:ok, _, result} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: Properties inside media queries should be prefixed
-    #   assert String.contains?(result, "@media (max-width: 768px)")
-    #   assert String.contains?(result, "-webkit-user-select: none")
-    #   assert String.contains?(result, "-moz-user-select: none")
-    # end
+      # Then: Properties inside media queries should be prefixed
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, "-webkit-user-select: none")
+      assert String.contains?(result, "-moz-user-select: none")
+    end
 
-    # test "handles invalid CSS" do
-    #   # Given: Invalid CSS
-    #   css_code = "invalid { css syntax"
-    #   # When: Adding vendor prefixes
-    #   prefixes = ["-webkit-", "-moz-"]
-    #   {:error, _, error_message} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = "invalid { css syntax"
+      # When: Adding vendor prefixes
+      prefixes = ["-webkit-", "-moz-"]
+      {:error, _, error_message} = Parser.add_vendor_prefixes(css_code, "user-select", prefixes)
 
-    #   # Then: Should return an error
-    #   assert String.contains?(error_message, "Failed to parse CSS")
-    # end
+      # Then: Should return an error
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
   end
 end

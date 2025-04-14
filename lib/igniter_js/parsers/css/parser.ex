@@ -94,11 +94,19 @@ defmodule IgniterJs.Parsers.CSS.Parser do
             """
             from css_tools.modifier import add_prefix_to_property
 
+            # Convert all prefixes from bytes to strings if needed
+            string_prefixes = []
+            for prefix in prefixes:
+                if isinstance(prefix, bytes):
+                    string_prefixes.append(prefix.decode('utf-8'))
+                else:
+                    string_prefixes.append(prefix)
+
             try:
               modified_css = add_prefix_to_property(
                   css_code,
                   property_name,
-                  prefixes
+                  string_prefixes
               )
 
               result = {"status": "ok", "result": modified_css}
