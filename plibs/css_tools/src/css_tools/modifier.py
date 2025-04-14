@@ -473,3 +473,131 @@ def merge_stylesheets(css_list: List[Union[str, bytes]]) -> str:
             merged_css += tinycss2.serialize([rule])
 
     return merged_css.strip()
+
+def replace_selector_rule(css: Union[str, bytes], selector: Union[str, bytes], new_declarations: Union[str, bytes]) -> str:
+    """
+    Replace an entire CSS rule for a specific selector with new declarations.
+
+    Args:
+        css: The CSS code as string or bytes
+        selector: The CSS selector to replace
+        new_declarations: The new CSS declarations as a string (without curly braces)
+
+    Returns:
+        Modified CSS as a string
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed or new declarations are invalid
+    """
+    # Ensure input types are correct
+    if isinstance(css, bytes):
+        css = css.decode('utf-8')
+    if isinstance(selector, bytes):
+        selector = selector.decode('utf-8')
+    if isinstance(new_declarations, bytes):
+        new_declarations = new_declarations.decode('utf-8')
+
+    # Validate CSS syntax before proceeding
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
+    # Basic validation of the original CSS by parsing it
+    try:
+        rules = parse_stylesheet(css)
+
+        # Check for parse errors in the original CSS
+        for rule in rules:
+            if hasattr(rule, 'type') and rule.type == 'error':
+                raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
+    except Exception as e:
+        raise Exception(f"Failed to parse CSS: {str(e)}")
+
+    # Validate new declarations syntax - ensure each declaration ends with a semicolon
+    declarations_list = [d.strip() for d in new_declarations.split(';') if d.strip()]
+    for decl in declarations_list:
+        if ':' not in decl:
+            raise Exception(f"Invalid declaration syntax: Missing colon in '{decl}'")
+
+    # Reconstruct new_declarations with proper formatting and ensure semicolons
+    new_declarations = '; '.join(declarations_list) + ';'
+
+    try:
+        # Simple validation by trying to parse a test rule
+        test_css = f".test{{ {new_declarations} }}"
+        test_rules = parse_stylesheet(test_css)
+        for rule in test_rules:
+            if hasattr(rule, 'type') and rule.type == 'error':
+                raise Exception(f"Invalid declaration syntax: {getattr(rule, 'message', 'Unknown error')}")
+    except Exception as e:
+        raise Exception(f"Invalid declaration syntax: {str(e)}")
+
+    # Flatten nested selectors if present in the CSS
+    flattened_css = ""
+    selector_found = False
+
+    def flatten_nested_css(rules, parent_selector=None):
+        nonlocal flattened_css, selector_found
+
+        for rule in rules:
+            if rule.type == "qualified-rule":
+                current_selector = get_selector_text(rule)
+                combined_selector = current_selector
+
+                if parent_selector:
+                    combined_selector = f"{parent_selector} {current_selector}"
+
+                if combined_selector == selector:
+                    # Found the selector to replace
+                    selector_found = True
+                    formatted_declarations = "\n".join(f"    {decl};" for decl in new_declarations.split(';') if decl.strip())
+                    flattened_css += f"{selector} {{\n{formatted_declarations}\n}}\n"
+                else:
+                    # Keep other rules
+                    declarations = get_rule_declarations(rule)
+
+                    # Check if this rule contains more nested rules
+                    nested_rules = []
+                    for item in declarations:
+                        if item.type == "qualified-rule":
+                            nested_rules.append(item)
+
+                    if nested_rules:
+                        # Process nested rules
+                        flatten_nested_css(nested_rules, combined_selector)
+                    else:
+                        # Regular rule - add it to output
+                        serialized_content = tinycss2.serialize(declarations).strip()
+                        if serialized_content:  # Only add if there's content
+                            serialized_content = "\n".join(f"    {line.strip()}" for line in serialized_content.splitlines() if line.strip())
+                            flattened_css += f"{combined_selector} {{\n{serialized_content}\n}}\n"
+
+            elif rule.type == "at-rule" and rule.content:
+                # Handle at-rules like media queries
+                at_keyword = rule.at_keyword
+                prelude = tinycss2.serialize(rule.prelude).strip()
+
+                # Store the current CSS position
+                current_css_length = len(flattened_css)
+
+                # Process nested rules in the at-rule
+                inner_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                flatten_nested_css(inner_rules)
+
+                # If content was added, wrap it in the at-rule
+                if len(flattened_css) > current_css_length:
+                    at_rule_content = flattened_css[current_css_length:]
+                    flattened_css = flattened_css[:current_css_length]
+                    flattened_css += f"@{at_keyword} {prelude} {{\n{at_rule_content}}}\n"
+            else:
+                # Other rules like comments
+                flattened_css += tinycss2.serialize([rule])
+
+    # Process the CSS
+    flatten_nested_css(rules)
+
+    # Add the selector if not found
+    if not selector_found:
+        formatted_declarations = "\n".join(f"    {decl};" for decl in new_declarations.split(';') if decl.strip())
+        flattened_css += f"\n{selector} {{\n{formatted_declarations}\n}}\n"
+
+    return flattened_css.strip()

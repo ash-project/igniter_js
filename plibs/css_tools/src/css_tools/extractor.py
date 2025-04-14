@@ -168,6 +168,7 @@ def validate_css(css: Union[str, bytes]) -> str:
     Raises:
         Exception: If the CSS cannot be properly parsed
     """
+
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
@@ -175,8 +176,38 @@ def validate_css(css: Union[str, bytes]) -> str:
     if css.count('{') != css.count('}'):
         raise Exception("CSS syntax error: Unbalanced braces")
 
-    return css
+    # Parse the CSS to detect syntax errors
+    rules = tinycss2.parse_stylesheet(css)
+    check_parse_errors(rules)
 
+    # Check each rule for proper declaration syntax
+    for rule in rules:
+        if rule.type == 'qualified-rule' and rule.content:
+            declarations = tinycss2.parse_declaration_list(rule.content)
+            check_parse_errors(declarations, "in declaration")
+
+            # Extra check for missing semicolons
+            serialized_rule = tinycss2.serialize(rule.content).strip()
+            # Look for patterns that suggest missing semicolons
+            lines = serialized_rule.split('\n')
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if ':' in line and not line.endswith(';') and not line.endswith('{') and '}' not in line:
+                    # Check if this is not the last line or if there's another declaration after it
+                    if (i+1 < len(lines) and (':' in lines[i+1] or not lines[i+1].strip().startswith('}'))):
+                        raise Exception(f"CSS syntax error: Missing semicolon after '{line}'")
+
+    # Manual check for missing semicolons (line by line)
+    lines = css.split('\n')
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        # If it looks like a declaration (has a colon) but doesn't end with a semicolon
+        if ':' in line_stripped and not line_stripped.endswith(';') and not line_stripped.endswith('{') and '}' not in line_stripped:
+            # Check if next line exists and has content (not a closing brace or empty)
+            if i+1 < len(lines) and lines[i+1].strip() and not lines[i+1].strip().startswith('}'):
+                raise Exception(f"CSS syntax error: Missing semicolon at line {i+1} after '{line_stripped}'")
+
+    return css
 
 def check_parse_errors(rules, context=""):
     """
@@ -478,10 +509,10 @@ def extract_fonts(css: Union[str, bytes]) -> Dict[str, List[Dict[str, Any]]]:
                 selector = get_selector_text(rule)
                 # Handle nested selectors by combining with parent selector
                 full_selector = f"{parent_selector} {selector}".strip() if parent_selector else selector
-                
+
                 declarations = get_rule_declarations(rule)
                 font_decls = []
-                
+
                 for decl in declarations:
                     if decl.type == "declaration" and decl.name in font_properties:
                         value = tinycss2.serialize(decl.value).strip()
@@ -555,7 +586,7 @@ def extract_selectors_by_property(css: Union[str, bytes], property_name: str) ->
             if rule.type == "qualified-rule":
                 selector = get_selector_text(rule)
                 declarations = get_rule_declarations(rule)
-                
+
                 for decl in declarations:
                     if decl.type == "declaration" and decl.name.lower() == property_name.lower():
                         value = tinycss2.serialize(decl.value).strip()

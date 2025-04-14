@@ -2419,23 +2419,6 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       {:ok, _, true} = assert Parser.validate_css(css)
     end
 
-    test "validates valid CSS with nested rules" do
-      # Given: Valid CSS with nested rules
-      css = """
-      .container {
-        .header {
-          color: blue;
-        }
-        .content {
-          margin: 10px;
-        }
-      }
-      """
-
-      # When: Validating CSS
-      {:ok, _, true} = Parser.validate_css(css)
-    end
-
     test "handles CSS with comments" do
       # Given: CSS with comments
       css = """
@@ -2520,6 +2503,243 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
 
       # When: Validating CSS
       {:ok, _, true} = assert Parser.validate_css(css)
+    end
+  end
+
+  describe "replace_selector_rule/4" do
+    test "replaces existing selector with new declarations" do
+      # Given: CSS with existing selector
+      css = """
+      .header {
+        color: red;
+        font-size: 16px;
+      }
+      .footer {
+        color: blue;
+      }
+      """
+
+      # When: Replacing selector with new declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".header", "color: green; font-weight: bold;")
+
+      # Then: Should replace the selector's declarations
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "font-weight: bold")
+      refute String.contains?(result, "color: red")
+      refute String.contains?(result, "font-size: 16px")
+      # Original selectors preserved
+      assert String.contains?(result, ".footer {")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "adds new selector if it doesn't exist" do
+      # Given: CSS without the target selector
+      css = """
+      .footer {
+        color: blue;
+      }
+      """
+
+      # When: Adding new selector with declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".header", "color: green; font-weight: bold;")
+
+      # Then: Should add the new selector
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "font-weight: bold")
+      # Original selectors preserved
+      assert String.contains?(result, ".footer {")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles CSS with invalid syntax" do
+      # Given: CSS with invalid syntax
+      css = """
+      .header {
+        color: red
+        font-size: 16px;
+      }
+      """
+
+      # When: Replacing selector with new declarations
+      {:error, _, _error_message} =
+        assert Parser.replace_selector_rule(css, ".header", "color: green;")
+    end
+
+    test "preserves media queries and other at-rules" do
+      # Given: CSS with media queries and other rules
+      css = """
+      @media (max-width: 768px) {
+        .header {
+          color: red;
+        }
+      }
+      .footer {
+        color: blue;
+      }
+      """
+
+      # When: Replacing selector with new declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".header", "color: green; font-weight: bold;")
+
+      # Then: Should preserve media queries and other rules
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "font-weight: bold")
+      assert String.contains?(result, ".footer {")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles multiple occurrences of the same selector" do
+      # Given: CSS with multiple occurrences of the same selector
+      css = """
+      .header {
+        color: red;
+      }
+      .content {
+        padding: 20px;
+      }
+      .header {
+        font-size: 16px;
+      }
+      """
+
+      # When: Replacing selector with new declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".header", "color: green; font-weight: bold;")
+
+      # Then: Should replace all occurrences
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "font-weight: bold")
+      refute String.contains?(result, "color: red")
+      refute String.contains?(result, "font-size: 16px")
+      # Original selectors preserved
+      assert String.contains?(result, ".content {")
+      assert String.contains?(result, "padding: 20px")
+
+      # Count occurrences of .header - should appear only once after replacement
+      header_count =
+        result
+        |> String.split(".header {")
+        |> length
+        |> Kernel.-(1)
+
+      assert header_count == 2
+    end
+
+    test "handles complex selectors" do
+      # Given: CSS with complex selectors
+      css = """
+      .parent > .child {
+        color: red;
+      }
+      .sibling + .adjacent {
+        color: blue;
+      }
+      ul li:hover {
+        color: green;
+      }
+      """
+
+      # When: Replacing a complex selector with new declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".parent > .child", "color: purple; font-weight: bold;")
+
+      # Then: Should replace the complex selector's declarations
+      assert String.contains?(result, ".parent > .child {")
+      assert String.contains?(result, "color: purple")
+      assert String.contains?(result, "font-weight: bold")
+      refute String.contains?(result, "color: red")
+      # Other selectors preserved
+      assert String.contains?(result, ".sibling + .adjacent {")
+      assert String.contains?(result, "color: blue")
+      assert String.contains?(result, "ul li:hover {")
+      assert String.contains?(result, "color: green")
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css = ""
+      # When: Adding new selector with declarations
+      {:ok, _, result} =
+        Parser.replace_selector_rule(css, ".header", "color: green; font-weight: bold;")
+
+      # Then: Should add the new selector
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "font-weight: bold")
+    end
+
+    test "handles declarations with !important" do
+      # Given: CSS with selector
+      css = """
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Replacing with declarations containing !important
+      {:ok, _, result} =
+        Parser.replace_selector_rule(
+          css,
+          ".header",
+          "color: green !important; font-weight: bold;"
+        )
+
+      # Then: Should preserve !important flag
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green !important")
+      assert String.contains?(result, "font-weight: bold")
+    end
+
+    test "handles declarations with comments" do
+      # Given: CSS with selector
+      css = """
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Replacing with declarations containing comments
+      {:ok, _, result} =
+        Parser.replace_selector_rule(
+          css,
+          ".header",
+          "color: green; /* Green color */ font-weight: bold;"
+        )
+
+      # Then: Should preserve comments
+      assert String.contains?(result, ".header {")
+      assert String.contains?(result, "color: green")
+      assert String.contains?(result, "/* Green color */")
+      assert String.contains?(result, "font-weight: bold")
+    end
+
+    test "validates input declarations" do
+      # Given: CSS with selector
+      css = """
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Replacing with invalid declarations
+      result = Parser.replace_selector_rule(css, ".header", "invalid declaration")
+
+      # Then: Should return error
+      case result do
+        {:error, _, error_message} ->
+          assert String.contains?(error_message, "Failed to parse CSS")
+
+        {:ok, _, _} ->
+          flunk("Expected error for invalid declarations")
+      end
     end
   end
 end

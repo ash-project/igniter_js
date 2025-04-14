@@ -780,71 +780,51 @@ defmodule IgniterJs.Parsers.CSS.Parser do
       "css with .header rule replaced"
   """
   def replace_selector_rule(file_path_or_content, selector, new_declarations, type \\ :content) do
-    call_nif_fn(
-      file_path_or_content,
-      __ENV__.function,
-      fn file_content ->
-        {result, _globals} =
-          Pythonx.eval(
-            """
-            import tinycss2
-            from css_tools.parser import parse_stylesheet, get_selector_text
+    # First validate the CSS using the existing validate_css function
+    case validate_css(file_path_or_content, type) do
+      {:ok, _, _} ->
+        # CSS is valid, proceed with replacement
+        call_nif_fn(
+          file_path_or_content,
+          __ENV__.function,
+          fn file_content ->
+            {result, _globals} =
+              Pythonx.eval(
+                """
+                from css_tools.modifier import replace_selector_rule
+                try:
+                    # Call the dedicated function
+                    modified_css = replace_selector_rule(css_code, selector, new_declarations)
+                    result = {"status": "ok", "result": modified_css}
+                except Exception as e:
+                    # Return any errors in a structured format
+                    result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+                result
+                """,
+                %{
+                  "css_code" => file_content,
+                  "selector" => selector,
+                  "new_declarations" => new_declarations
+                }
+              )
 
-            if isinstance(selector, bytes):
-                selector = selector.decode('utf-8')
-            if isinstance(new_declarations, bytes):
-                new_declarations = new_declarations.decode('utf-8')
+            parsed_result = Pythonx.decode(result)
 
-            rules = parse_stylesheet(css_code)
-            modified_css = ""
-            selector_found = False
+            case parsed_result do
+              %{"status" => "ok", "result" => modified_css} ->
+                {:ok, __ENV__.function, modified_css}
 
-            for rule in rules:
-                if rule.type == "qualified-rule":
-                    rule_selector = get_selector_text(rule)
+              %{"status" => "error", "message" => message} ->
+                {:error, __ENV__.function, message}
+            end
+          end,
+          type
+        )
 
-                    if rule_selector == selector:
-                        selector_found = True
-                        # Format the new declarations
-                        formatted_declarations = "\\n".join("    " + line.strip() for line in new_declarations.split(";") if line.strip())
-                        # Replace the rule with new content
-                        formatted_rule = f"{selector} {{\\n{formatted_declarations}\\n}}\\n"
-                        modified_css += formatted_rule
-                    else:
-                        # Keep other rules as they are
-                        modified_css += tinycss2.serialize([rule])
-                else:
-                    # Keep other non-qualified rules as they are
-                    modified_css += tinycss2.serialize([rule])
-
-            # Add the selector if it wasn't found
-            if not selector_found:
-                formatted_declarations = "\\n".join("    " + line.strip() for line in new_declarations.split(";") if line.strip())
-                new_rule = f"\\n{selector} {{\\n{formatted_declarations}\\n}}\\n"
-                modified_css += new_rule
-
-            result = modified_css.strip()
-            result
-            """,
-            %{
-              "css_code" => css_code,
-              "selector" => selector,
-              "new_declarations" => new_declarations
-            }
-          )
-
-        parsed_result = Pythonx.decode(result)
-
-        case parsed_result do
-          %{"status" => "ok", "result" => modified_css} ->
-            {:ok, __ENV__.function, modified_css}
-
-          %{"status" => "error", "message" => message} ->
-            {:error, __ENV__.function, message}
-        end
-      end,
-      type
-    )
+      # If validation fails, return the error
+      {:error, _, error_message} ->
+        {:error, __ENV__.function, error_message}
+    end
   end
 
   @doc """
