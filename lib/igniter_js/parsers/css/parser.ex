@@ -967,43 +967,73 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.remove_import(css_code, "styles.css")
-      "css with @import url('styles.css') removed"
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.remove_import(css_code, "styles.css")
+  "css with @import url('styles.css') removed"
+  ```
   """
-  def remove_import(css_code, import_url) when is_binary(css_code) and is_binary(import_url) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        import tinycss2
-        from css_tools.parser import parse_stylesheet
+  def remove_import(file_path_or_content, import_url, type \\ :content) do
+    case validate_css(file_path_or_content, type) do
+      {:ok, _, _} ->
+        call_nif_fn(
+          file_path_or_content,
+          __ENV__.function,
+          fn file_content ->
+            {result, _globals} =
+              Pythonx.eval(
+                """
+                import tinycss2
+                from css_tools.parser import parse_stylesheet
 
-        if isinstance(import_url, bytes):
-            import_url = import_url.decode('utf-8')
+                if isinstance(import_url, bytes):
+                    import_url = import_url.decode('utf-8')
 
-        rules = parse_stylesheet(css_code)
-        modified_css = ""
+                try:
+                  rules = parse_stylesheet(css_code)
+                  modified_css = ""
 
-        for rule in rules:
-            if rule.type == "at-rule" and rule.at_keyword.lower() == "import":
-                # Check if this import contains the URL we want to remove
-                serialized = tinycss2.serialize(rule.prelude)
-                if import_url not in serialized:
-                    # Keep imports that don't match
-                    modified_css += tinycss2.serialize([rule])
-            else:
-                # Keep all other rules
-                modified_css += tinycss2.serialize([rule])
+                  for rule in rules:
+                      if rule.type == "at-rule" and rule.at_keyword.lower() == "import":
+                          # Check if this import contains the URL we want to remove
+                          serialized = tinycss2.serialize(rule.prelude)
+                          if import_url not in serialized:
+                              # Keep imports that don't match
+                              modified_css += tinycss2.serialize([rule])
+                      else:
+                          # Keep all other rules
+                          modified_css += tinycss2.serialize([rule])
 
-        result = modified_css.strip()
-        result
-        """,
-        %{
-          "css_code" => css_code,
-          "import_url" => import_url
-        }
-      )
+                  modified_css = modified_css.strip()
+                  result = {"status": "ok", "result": modified_css}
 
-    Pythonx.decode(result)
+                except Exception as e:
+                    # Return any errors in a structured format
+                    result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+                result
+                """,
+                %{
+                  "css_code" => file_content,
+                  "import_url" => import_url
+                }
+              )
+
+            parsed_result = Pythonx.decode(result)
+
+            case parsed_result do
+              %{"status" => "ok", "result" => modified_css} ->
+                {:ok, __ENV__.function, modified_css}
+
+              %{"status" => "error", "message" => message} ->
+                {:error, __ENV__.function, message}
+            end
+          end,
+          type
+        )
+
+      {:error, _, error_message} ->
+        {:error, :remove_import, error_message}
+    end
   end
 
   @doc """
@@ -1022,7 +1052,7 @@ defmodule IgniterJs.Parsers.CSS.Parser do
       iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, "#nonexistent")
       false
   """
-  def selector_exists?(css_code, selector) when is_binary(css_code) and is_binary(selector) do
+  def selector_exists?(css_code, selector) do
     {result, _globals} =
       Pythonx.eval(
         """

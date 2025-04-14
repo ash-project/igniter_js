@@ -2865,4 +2865,153 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert error_message =~ "Unbalanced braces"
     end
   end
+
+  describe "remove_import/3" do
+    test "removes import from CSS" do
+      # Given: CSS with an import
+      css = """
+      @import 'styles.css';
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing the import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "styles.css")
+
+      # Then: The import should be removed
+      refute String.contains?(result, "@import 'styles.css'")
+      assert String.contains?(result, "body {")
+    end
+
+    test "removes URL import from CSS" do
+      # Given: CSS with an import using url()
+      css = """
+      @import url('https://example.com/styles.css');
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing the import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "example.com/styles.css")
+
+      # Then: The import should be removed
+      refute String.contains?(result, "@import url('https://example.com/styles.css')")
+      assert String.contains?(result, "body {")
+    end
+
+    test "removes import with media query" do
+      # Given: CSS with an import with media query
+      css = """
+      @import 'mobile.css' screen and (max-width: 768px);
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing the import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "mobile.css")
+
+      # Then: The import should be removed
+      refute String.contains?(result, "@import 'mobile.css'")
+      assert String.contains?(result, "body {")
+    end
+
+    test "removes only matching import and keeps others" do
+      # Given: CSS with multiple imports
+      css = """
+      @import 'base.css';
+      @import 'styles.css';
+      @import 'mobile.css' screen and (max-width: 768px);
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing just one import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "styles.css")
+
+      # Then: Only the matching import should be removed
+      assert String.contains?(result, "@import \"base.css\";")
+      refute String.contains?(result, "@import 'styles.css'")
+      assert String.contains?(result, "@import \"mobile.css\"")
+    end
+
+    test "handles CSS with no matching import" do
+      # Given: CSS with no matching import
+      css = """
+      @import 'base.css';
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Trying to remove a non-existent import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "styles.css")
+
+      # Then: The CSS should remain unchanged
+      assert elem(Parser.beautify(result), 2) == elem(Parser.beautify(css), 2)
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Trying to remove an import
+      {:ok, :remove_import, result} = Parser.remove_import(css, "styles.css")
+
+      # Then: The result should be empty too
+      assert result == ""
+    end
+
+    test "validates CSS before removing import" do
+      # Given: Invalid CSS with missing semicolon
+      css = """
+      body {
+        color: red
+        font-size: 16px;
+      }
+      """
+
+      # When: Trying to remove an import from invalid CSS
+      {:error, :remove_import, error_message} = Parser.remove_import(css, "styles.css")
+
+      # Then: Should return a validation error
+      assert error_message =~ "Missing semicolon"
+    end
+
+    test "validates CSS with unbalanced braces" do
+      # Given: Invalid CSS with unbalanced braces
+      css = """
+      body {
+        color: red;
+        font-size: 16px;
+      """
+
+      # When: Trying to remove an import from invalid CSS
+      {:error, :remove_import, error_message} = Parser.remove_import(css, "styles.css")
+
+      # Then: Should return a validation error about braces
+      assert error_message =~ "Unbalanced braces"
+    end
+
+    test "partial URL matching works correctly" do
+      # Given: CSS with various import URLs
+      css = """
+      @import url('https://example.com/styles.css');
+      @import url('https://other-domain.com/styles.css');
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing import with partial URL match
+      {:ok, :remove_import, result} = Parser.remove_import(css, "example.com")
+
+      # Then: Only the matching import should be removed
+      refute String.contains?(result, "example.com")
+      assert String.contains?(result, "other-domain.com")
+    end
+  end
 end
