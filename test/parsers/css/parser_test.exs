@@ -2186,4 +2186,208 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert {:error, _, _} = result
     end
   end
+
+  describe "remove_duplicates/2" do
+    test "removes duplicate properties within a selector" do
+      # Given: CSS with duplicate properties
+      css_code = """
+      .header {
+        color: blue;
+        color: red;
+        font-size: 16px;
+        font-size: 18px;
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Only the last occurrence of each property should remain
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: red")
+      assert String.contains?(result, "font-size: 18px")
+      refute String.contains?(result, "color: blue")
+      refute String.contains?(result, "font-size: 16px")
+    end
+
+    test "removes duplicate selectors" do
+      # Given: CSS with duplicate selectors
+      css_code = """
+      .header {
+        color: blue;
+        height: 10px;
+      }
+
+      .content {
+        padding: 20px;
+      }
+
+      .header {
+        color: red;
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Only the last occurrence of each selector should remain
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+      assert String.contains?(result, ".content")
+      assert String.contains?(result, "padding: 20px")
+      # Count occurrences of .header - should only appear once
+      assert Regex.scan(~r/\.header\s*\{/, result) |> length() == 1
+    end
+
+    test "preserves !important flags when removing duplicates" do
+      # Given: CSS with duplicate properties, one with !important
+      css_code = """
+      .important {
+        color: blue !important;
+        color: red;
+        font-size: 16px;
+        font-size: 18px !important;
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: !important flags should be preserved
+      assert String.contains?(result, "color: red")
+      assert String.contains?(result, "font-size: 18px !important")
+      refute String.contains?(result, "color: blue")
+      refute String.contains?(result, "font-size: 16px")
+    end
+
+    test "handles media queries" do
+      # Given: CSS with duplicate properties in media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          color: blue;
+          color: red;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .mobile {
+          font-size: 16px;
+          font-size: 18px;
+        }
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Media query structure should be preserved and duplicates removed
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, ".mobile")
+      assert String.contains?(result, "color: red")
+      refute String.contains?(result, "color: blue")
+      refute String.contains?(result, "font-size: 16px")
+      # Count occurrences of media query - should only appear once
+      assert Regex.scan(~r/@media\s*\(max-width:\s*768px\)\s*\{/, result) |> length() == 1
+    end
+
+    test "preserves comments" do
+      # Given: CSS with comments and duplicate properties
+      css_code = """
+      /* Header styles */
+      .header {
+        /* Color settings */
+        color: blue;
+        color: red;
+        /* Font settings */
+        font-size: 16px;
+        font-size: 18px;
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Comments should be preserved
+      assert String.contains?(result, "/* Header styles */")
+      assert String.contains?(result, "/*  Color settings  */")
+      assert String.contains?(result, "/*  Font settings  */")
+      assert String.contains?(result, "color: red")
+      assert String.contains?(result, "font-size: 18px")
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Should return empty string
+      assert result == ""
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = "invalid css"
+
+      # When: Removing duplicates
+      result = Parser.remove_duplicates(css_code)
+
+      # Then: Should return error
+      assert {:error, _, _} = result
+    end
+
+    test "handles complex selectors" do
+      # Given: CSS with complex selectors and duplicate properties
+      css_code = """
+      .parent > .child {
+        color: blue;
+        color: red;
+      }
+
+      .sibling + .adjacent {
+        margin: 10px;
+        margin: 20px;
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Complex selectors should be preserved and duplicates removed
+      assert String.contains?(result, ".parent > .child")
+      assert String.contains?(result, "color: red")
+      assert String.contains?(result, ".sibling + .adjacent")
+      assert String.contains?(result, "margin: 20px")
+      refute String.contains?(result, "color: blue")
+      refute String.contains?(result, "margin: 10px")
+    end
+
+    test "handles pseudo-classes and pseudo-elements" do
+      # Given: CSS with pseudo-classes and duplicate properties
+      css_code = """
+      .button:hover {
+        background: blue;
+        background: red;
+      }
+
+      .content::before {
+        content: "old";
+        content: "new";
+      }
+      """
+
+      # When: Removing duplicates
+      {:ok, _, result} = Parser.remove_duplicates(css_code)
+
+      # Then: Pseudo-classes and pseudo-elements should be preserved
+      assert String.contains?(result, ".button:hover")
+      assert String.contains?(result, "background: red")
+      assert String.contains?(result, ".content::before")
+      assert String.contains?(result, "content: \"new\"")
+      refute String.contains?(result, "background: blue")
+      refute String.contains?(result, "content: \"old\"")
+    end
+  end
 end
