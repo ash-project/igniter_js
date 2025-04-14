@@ -4,6 +4,9 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   This module provides functions to work with CSS files by leveraging
   a Python toolkit built on tinycss2 for parsing, modifying, and analyzing CSS.
+
+  > **Please note that the use of Python in Elixir will remain experimental for now,
+  > as we continue to improve it over time and decide whether to adopt it fully.**
   """
 
   import IgniterJs.Helpers, only: [call_nif_fn: 4]
