@@ -3194,4 +3194,190 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert combined_result == true
     end
   end
+
+  describe "get_selector_properties/3" do
+    test "returns properties for an existing selector" do
+      # Given: CSS with a specific selector and properties
+      css = """
+      .header {
+        color: blue;
+        font-size: 16px;
+        margin-top: 20px;
+      }
+      """
+
+      # When: Getting properties for the selector
+
+      {:ok, :get_selector_properties, properties} = Parser.get_selector_properties(css, ".header")
+
+      # Then: Should return a map of properties
+      assert properties != nil
+      assert properties["color"] == "blue"
+      assert properties["font-size"] == "16px"
+      assert properties["margin-top"] == "20px"
+    end
+
+    test "returns nil for a non-existent selector" do
+      # Given: CSS without the specific selector
+      css = """
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+      """
+
+      # When: Getting properties for a non-existent selector
+      {:ok, :get_selector_properties, properties} =
+        Parser.get_selector_properties(css, "#nonexistent")
+
+      # Then: Should return nil
+      assert properties == nil
+    end
+
+    test "handles properties with multiple values" do
+      # Given: CSS with properties that have multiple values
+      css = """
+      .box {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        font-family: Arial, Helvetica, sans-serif;
+        border: 1px solid #ccc;
+      }
+      """
+
+      # When: Getting properties for the selector
+      {:ok, :get_selector_properties, properties} = Parser.get_selector_properties(css, ".box")
+
+      # Then: Should correctly capture multi-value properties
+      assert properties["box-shadow"] == "0 2px 4px rgba(0, 0, 0, 0.2)"
+      assert properties["font-family"] == "Arial, Helvetica, sans-serif"
+      assert properties["border"] == "1px solid #ccc"
+    end
+
+    test "handles CSS variables and functions" do
+      # Given: CSS with variables and functions
+      css = """
+      .modern {
+        --primary-color: #3498db;
+        color: var(--primary-color);
+        transform: translateY(-10px);
+        background: linear-gradient(to right, #f5f5f5, #e5e5e5);
+      }
+      """
+
+      # When: Getting properties for the selector
+      {:ok, :get_selector_properties, properties} = Parser.get_selector_properties(css, ".modern")
+
+      # Then: Should correctly handle variables and functions
+      assert properties["--primary-color"] == "#3498db"
+      assert properties["color"] == "var(--primary-color)"
+      assert properties["transform"] == "translateY(-10px)"
+      assert String.contains?(properties["background"], "linear-gradient")
+    end
+
+    test "handles comments within declarations" do
+      # Given: CSS with comments inside declarations
+      css = """
+      .comment-test {
+        color: blue; /* This is a blue color */
+        font-size: 16px; /* Standard size */
+      }
+      """
+
+      # When: Getting properties for the selector
+      {:ok, :get_selector_properties, properties} =
+        Parser.get_selector_properties(css, ".comment-test")
+
+      # Then: Should ignore comments in the values
+      assert properties["color"] == "blue"
+      assert properties["font-size"] == "16px"
+    end
+
+    test "handles empty declarations" do
+      # Given: CSS with an empty declaration block
+      css = """
+      .empty-block {
+      }
+      """
+
+      # When: Getting properties for the selector
+      {:ok, :get_selector_properties, properties} =
+        Parser.get_selector_properties(css, ".empty-block")
+
+      # Then: Should return an empty map, not nil
+      assert properties == %{}
+    end
+
+    test "handles invalid CSS gracefully" do
+      # Given: Invalid CSS with syntax errors
+      css = """
+      .invalid {
+        color: red
+        font-size: 16px;
+      }
+      """
+
+      # When: Trying to get properties from invalid CSS
+      result = Parser.get_selector_properties(css, ".invalid")
+
+      # Then: Should return an error or handle it gracefully
+      case result do
+        {:ok, :get_selector_properties, _} ->
+          # If your parser is robust enough to handle this error
+          :ok
+
+        {:error, :get_selector_properties, error_message} ->
+          # If your parser properly reports the error
+          assert error_message =~ "parse" or error_message =~ "syntax"
+      end
+    end
+
+    test "gets only the first matching selector's properties" do
+      # Given: CSS with duplicate selectors
+      css = """
+      .duplicate {
+        color: red;
+      }
+
+      .other {
+        font-size: 20px;
+      }
+
+      .duplicate {
+        font-weight: bold;
+      }
+      """
+
+      # When: Getting properties for the duplicate selector
+      {:ok, :get_selector_properties, properties} =
+        Parser.get_selector_properties(css, ".duplicate")
+
+      # Then: Should return properties from the first occurrence only
+      assert properties["color"] == "red"
+      refute Map.has_key?(properties, "font-weight")
+    end
+
+    test "handles specific complex selectors" do
+      # Given: CSS with complex selectors
+      css = """
+      .parent > .child {
+        color: green;
+      }
+
+      #main input[type="text"] {
+        border: 1px solid gray;
+      }
+      """
+
+      # When: Getting properties for the complex selectors
+      {:ok, :get_selector_properties, parent_child} =
+        Parser.get_selector_properties(css, ".parent > .child")
+
+      {:ok, :get_selector_properties, input_type} =
+        Parser.get_selector_properties(css, "#main input[type=\"text\"]")
+
+      # Then: Should correctly identify and return properties
+      assert parent_child["color"] == "green"
+      assert input_type["border"] == "1px solid gray"
+    end
+  end
 end

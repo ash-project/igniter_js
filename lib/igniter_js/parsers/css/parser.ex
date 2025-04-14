@@ -1108,49 +1108,68 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, ".header")
-      %{"color" => "blue", "font-size" => "16px"}
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, ".header")
+  %{"color" => "blue", "font-size" => "16px"}
 
-      iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, "#nonexistent")
-      nil
+  iex> IgniterJs.Parsers.CSS.Parser.get_selector_properties(css_code, "#nonexistent")
+  nil
+  ```
   """
-  def get_selector_properties(css_code, selector)
-      when is_binary(css_code) and is_binary(selector) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        import tinycss2
-        from css_tools.parser import parse_stylesheet, get_selector_text, get_rule_declarations
 
-        if isinstance(selector, bytes):
-            selector = selector.decode('utf-8')
+  def get_selector_properties(file_path_or_content, selector, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            import tinycss2
+            from css_tools.parser import parse_stylesheet, get_selector_text, get_rule_declarations
 
-        rules = parse_stylesheet(css_code)
-        properties = None
+            try:
+                if isinstance(selector, bytes):
+                    selector = selector.decode('utf-8')
 
-        for rule in rules:
-            if rule.type == "qualified-rule":
-                rule_selector = get_selector_text(rule)
-                if rule_selector == selector:
-                    declarations = get_rule_declarations(rule)
-                    properties = {}
+                rules = parse_stylesheet(css_code)
+                properties = None
 
-                    for decl in declarations:
-                        if decl.type == "declaration":
-                            value = tinycss2.serialize(decl.value).strip()
-                            properties[decl.name] = value
+                for rule in rules:
+                    if rule.type == "qualified-rule":
+                        rule_selector = get_selector_text(rule)
+                        if rule_selector == selector:
+                            declarations = get_rule_declarations(rule)
+                            properties = {}
+                            for decl in declarations:
+                                if decl.type == "declaration":
+                                    value = tinycss2.serialize(decl.value).strip()
+                                    properties[decl.name] = value
+                            break
 
-                    break
+                result = {"status": "ok", "result": properties}
+            except Exception as e:
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
 
-        result = properties
-        result
-        """,
-        %{
-          "css_code" => css_code,
-          "selector" => selector
-        }
-      )
+            result
+            """,
+            %{
+              "css_code" => file_content,
+              "selector" => selector
+            }
+          )
 
-    Pythonx.decode(result)
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => properties} ->
+            {:ok, __ENV__.function, properties}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 end
