@@ -248,16 +248,28 @@ def find_animation_usage(rules):
     """
     animation_usage = {}
 
+    # List of animation-related properties (including vendor prefixes)
+    animation_properties = [
+        "animation", "animation-name",
+        "-webkit-animation", "-webkit-animation-name",
+        "-moz-animation", "-moz-animation-name",
+        "-ms-animation", "-ms-animation-name",
+        "-o-animation", "-o-animation-name"
+    ]
+
     for rule in rules:
         if rule.type == "qualified-rule":
             selector = get_selector_text(rule)
             declarations = get_rule_declarations(rule)
 
             for decl in declarations:
-                if decl.type == "declaration" and decl.name in ["animation", "animation-name"]:
+                if decl.type == "declaration" and decl.name in animation_properties:
                     value = tinycss2.serialize(decl.value).strip()
                     # Simple extraction, might need more complex parsing for multiple animations
                     animation_name = value.split()[0]
+
+                    # Normalize animation name (remove quotes if present)
+                    animation_name = animation_name.strip("'\"")
 
                     if animation_name not in animation_usage:
                         animation_usage[animation_name] = []
@@ -268,7 +280,7 @@ def find_animation_usage(rules):
 
 def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
     """
-    Extract all CSS animations and keyframes.
+    Extract all CSS animations and keyframes, including vendor-prefixed ones.
 
     Args:
         css: The CSS code as string or bytes
@@ -280,21 +292,80 @@ def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
         Exception: If the CSS cannot be properly parsed
     """
     # Validate and decode CSS
-    css = validate_css(css)
+    if isinstance(css, bytes):
+        css = css.decode('utf-8')
+
+    # Validate CSS syntax
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
 
     # Parse CSS
     rules = parse_stylesheet(css)
 
     # Check for parse errors
-    check_parse_errors(rules)
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
 
     animations = {}
 
-    # First pass: Find all @keyframes rules
+    # List of possible keyframes at-keywords (standard and vendor prefixed)
+    keyframes_keywords = [
+        "keyframes",
+        "-webkit-keyframes",
+        "-moz-keyframes",
+        "-ms-keyframes",
+        "-o-keyframes"
+    ]
+
+    # First pass: Find all @keyframes rules (including vendor prefixed)
     for rule in rules:
-        if rule.type == "at-rule" and rule.lower_at_keyword == "keyframes":
-            animation_name = tinycss2.serialize(rule.prelude).strip()
-            animations[animation_name] = extract_keyframes(rule)
+        if rule.type == "at-rule":
+            # Check if this is a keyframes rule (standard or vendor prefixed)
+            is_keyframes = False
+            animation_name = ""
+
+            # Check against all possible keyframes at-keywords
+            for keyword in keyframes_keywords:
+                if rule.lower_at_keyword == keyword or rule.at_keyword.lower() == keyword:
+                    is_keyframes = True
+                    break
+
+            if is_keyframes:
+                # Extract animation name
+                animation_name = tinycss2.serialize(rule.prelude).strip()
+                # Normalize animation name (remove quotes if present)
+                animation_name = animation_name.strip("'\"")
+
+                # Extract keyframes
+                keyframes = {}
+                if hasattr(rule, 'content') and rule.content:
+                    try:
+                        keyframe_rules = tinycss2.parse_stylesheet(
+                            rule.content, skip_whitespace=False, skip_comments=False
+                        )
+
+                        # Check for parse errors in keyframe rules
+                        for keyframe_rule in keyframe_rules:
+                            if hasattr(keyframe_rule, 'type') and keyframe_rule.type == 'error':
+                                raise Exception(f"CSS parse error in @keyframes: {getattr(keyframe_rule, 'message', 'Unknown error')}")
+
+                        for keyframe_rule in keyframe_rules:
+                            if keyframe_rule.type == "qualified-rule":
+                                # The "selector" for keyframes is the percentage or keywords (from/to)
+                                percentage = get_selector_text(keyframe_rule)
+                                declarations = get_rule_declarations(keyframe_rule)
+
+                                props = {}
+                                for decl in declarations:
+                                    if decl.type == "declaration":
+                                        props[decl.name] = tinycss2.serialize(decl.value).strip()
+
+                                keyframes[percentage] = props
+                    except Exception as e:
+                        raise Exception(f"Error parsing @keyframes content: {str(e)}")
+
+                animations[animation_name] = keyframes
 
     # Second pass: Find all elements using animations
     animation_usage = find_animation_usage(rules)
@@ -308,102 +379,6 @@ def extract_animations(css: Union[str, bytes]) -> Dict[str, Dict[str, Any]]:
         }
 
     return result
-
-
-def extract_selectors_by_property(css: Union[str, bytes], property_name: str) -> Dict[str, str]:
-    """
-    Extract all selectors that use a specific CSS property.
-
-    Args:
-        css: The CSS code as string or bytes
-        property_name: The property name to search for
-
-    Returns:
-        Dictionary mapping selectors to their property values
-    """
-    if isinstance(css, bytes):
-        css = css.decode('utf-8')
-
-    rules = parse_stylesheet(css)
-    selectors = {}
-
-    for rule in rules:
-        if rule.type == "qualified-rule":
-            selector = get_selector_text(rule)
-            declarations = get_rule_declarations(rule)
-
-            for decl in declarations:
-                if decl.type == "declaration" and decl.name == property_name:
-                    value = tinycss2.serialize(decl.value).strip()
-                    selectors[selector] = value
-
-    return selectors
-
-
-def extract_comments(css: Union[str, bytes]) -> Dict[str, List[str]]:
-    """
-    Extract all comments from CSS and associate them with nearby rules when possible.
-
-    Args:
-        css: The CSS code as string or bytes
-
-    Returns:
-        Dictionary with comments categorized
-    """
-    if isinstance(css, bytes):
-        css = css.decode('utf-8')
-
-    rules = parse_stylesheet(css)
-    result = {
-        "standalone_comments": [],
-        "rule_comments": {},
-        "declaration_comments": {}
-    }
-
-    current_comments = []
-
-    for i, rule in enumerate(rules):
-        if rule.type == "comment":
-            current_comments.append(rule.value)
-
-            # Check if this is a standalone comment (not followed by a rule)
-            if i == len(rules) - 1 or rules[i+1].type == "comment":
-                result["standalone_comments"].extend(current_comments)
-                current_comments = []
-
-        elif rule.type == "qualified-rule" and current_comments:
-            selector = get_selector_text(rule)
-
-            if selector not in result["rule_comments"]:
-                result["rule_comments"][selector] = []
-
-            result["rule_comments"][selector].extend(current_comments)
-            current_comments = []
-
-            # Look for comments inside declarations
-            declarations = get_rule_declarations(rule)
-            inside_comments = []
-
-            for decl in declarations:
-                if decl.type == "comment":
-                    inside_comments.append(decl.value)
-                elif decl.type == "declaration" and inside_comments:
-                    if selector not in result["declaration_comments"]:
-                        result["declaration_comments"][selector] = {}
-
-                    if decl.name not in result["declaration_comments"][selector]:
-                        result["declaration_comments"][selector][decl.name] = []
-
-                    result["declaration_comments"][selector][decl.name].extend(inside_comments)
-                    inside_comments = []
-
-        elif current_comments:
-            # For other rule types like at-rules
-            result["standalone_comments"].extend(current_comments)
-            current_comments = []
-
-    return result
-
 
 def extract_unused_selectors(css: Union[str, bytes], html_content: str) -> List[str]:
     """

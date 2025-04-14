@@ -1735,4 +1735,337 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "extract_animations/1" do
+    test "extracts basic animation and keyframes" do
+      # Given: CSS with basic animation and keyframes
+      css_code = """
+      @keyframes fade-in {
+        0% {
+          opacity: 0;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      .animated {
+        animation: fade-in 2s ease-in-out;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Animation and keyframes should be extracted correctly
+      assert is_map(result)
+      assert Map.has_key?(result, "fade-in")
+
+      # Check keyframes
+      assert is_map(result["fade-in"]["keyframes"])
+      assert result["fade-in"]["keyframes"]["0%"]["opacity"] == "0"
+      assert result["fade-in"]["keyframes"]["100%"]["opacity"] == "1"
+
+      # Check usage
+      assert ".animated" in result["fade-in"]["used_by"]
+    end
+
+    test "extracts multiple animations" do
+      # Given: CSS with multiple animations
+      css_code = """
+      @keyframes fade-in {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+
+      @keyframes slide-up {
+        0% { transform: translateY(20px); }
+        100% { transform: translateY(0); }
+      }
+
+      .header {
+        animation: fade-in 1s ease-out;
+      }
+
+      .content {
+        animation: slide-up 0.5s ease-in;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Both animations should be extracted correctly
+      assert Map.has_key?(result, "fade-in")
+      assert Map.has_key?(result, "slide-up")
+
+      # Check fade-in keyframes
+      assert result["fade-in"]["keyframes"]["0%"]["opacity"] == "0"
+      assert result["fade-in"]["keyframes"]["100%"]["opacity"] == "1"
+
+      # Check slide-up keyframes
+      assert result["fade-in"]["keyframes"]["0%"]["opacity"] == "0"
+      assert result["slide-up"]["keyframes"]["0%"]["transform"] == "translateY(20px)"
+      assert result["slide-up"]["keyframes"]["100%"]["transform"] == "translateY(0)"
+
+      # Check usage
+      assert ".header" in result["fade-in"]["used_by"]
+      assert ".content" in result["slide-up"]["used_by"]
+    end
+
+    test "extracts animations with multiple keyframes" do
+      # Given: CSS with animation having multiple keyframe steps
+      css_code = """
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .button {
+        animation: pulse 2s infinite;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: All keyframes should be extracted
+      assert Map.has_key?(result, "pulse")
+      assert Map.has_key?(result["pulse"]["keyframes"], "0%")
+      assert Map.has_key?(result["pulse"]["keyframes"], "50%")
+      assert Map.has_key?(result["pulse"]["keyframes"], "100%")
+
+      assert result["pulse"]["keyframes"]["0%"]["transform"] == "scale(1)"
+      assert result["pulse"]["keyframes"]["50%"]["transform"] == "scale(1.1)"
+      assert result["pulse"]["keyframes"]["100%"]["transform"] == "scale(1)"
+
+      assert ".button" in result["pulse"]["used_by"]
+    end
+
+    test "extracts animations with from/to notation" do
+      # Given: CSS with animation using from/to notation
+      css_code = """
+      @keyframes slide-left {
+        from {
+          transform: translateX(100%);
+        }
+        to {
+          transform: translateX(0);
+        }
+      }
+
+      .sidebar {
+        animation: slide-left 0.3s ease-out;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: from/to keyframes should be correctly extracted
+      assert Map.has_key?(result, "slide-left")
+      assert Map.has_key?(result["slide-left"]["keyframes"], "from")
+      assert Map.has_key?(result["slide-left"]["keyframes"], "to")
+
+      assert result["slide-left"]["keyframes"]["from"]["transform"] == "translateX(100%)"
+      assert result["slide-left"]["keyframes"]["to"]["transform"] == "translateX(0)"
+
+      assert ".sidebar" in result["slide-left"]["used_by"]
+    end
+
+    test "extracts animations with multiple properties per keyframe" do
+      # Given: CSS with animation having multiple properties per keyframe
+      css_code = """
+      @keyframes complex-animation {
+        0% {
+          opacity: 0;
+          transform: scale(0.8);
+          background-color: red;
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+          background-color: blue;
+        }
+      }
+
+      .card {
+        animation: complex-animation 1s;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: All properties should be extracted
+      assert Map.has_key?(result, "complex-animation")
+
+      assert result["complex-animation"]["keyframes"]["0%"]["opacity"] == "0"
+      assert result["complex-animation"]["keyframes"]["0%"]["transform"] == "scale(0.8)"
+      assert result["complex-animation"]["keyframes"]["0%"]["background-color"] == "red"
+
+      assert result["complex-animation"]["keyframes"]["100%"]["opacity"] == "1"
+      assert result["complex-animation"]["keyframes"]["100%"]["transform"] == "scale(1)"
+      assert result["complex-animation"]["keyframes"]["100%"]["background-color"] == "blue"
+
+      assert ".card" in result["complex-animation"]["used_by"]
+    end
+
+    test "extracts animations used by multiple selectors" do
+      # Given: CSS with animation used by multiple selectors
+      css_code = """
+      @keyframes fade-in {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+
+      .header {
+        animation: fade-in 1s;
+      }
+
+      .modal {
+        animation: fade-in 0.5s;
+      }
+
+      .tooltip {
+        animation: fade-in 0.3s;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: All selectors using the animation should be listed
+      assert Map.has_key?(result, "fade-in")
+      assert ".header" in result["fade-in"]["used_by"]
+      assert ".modal" in result["fade-in"]["used_by"]
+      assert ".tooltip" in result["fade-in"]["used_by"]
+    end
+
+    test "extracts animations with vendor prefixes" do
+      # Given: CSS with vendor prefixed animations
+      css_code = """
+      @-webkit-keyframes bounce {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+        100% { transform: translateY(0); }
+      }
+
+      .ball {
+        -webkit-animation: bounce 1s infinite;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Prefixed animations should be extracted
+      # Note: Exact behavior depends on how the Python function handles prefixes
+      assert Map.has_key?(result, "bounce") or Map.has_key?(result, "-webkit-bounce")
+
+      # Access the correct key (depending on implementation)
+      animation_key = if Map.has_key?(result, "bounce"), do: "bounce", else: "-webkit-bounce"
+
+      assert result[animation_key]["keyframes"]["0%"]["transform"] == "translateY(0)"
+      assert result[animation_key]["keyframes"]["50%"]["transform"] == "translateY(-20px)"
+      assert result[animation_key]["keyframes"]["100%"]["transform"] == "translateY(0)"
+    end
+
+    test "handles animation-name property" do
+      # Given: CSS using animation-name property instead of shorthand
+      css_code = """
+      @keyframes rotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .spinner {
+        animation-name: rotate;
+        animation-duration: 2s;
+        animation-iteration-count: infinite;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Animation should be extracted and associated with selector
+      assert Map.has_key?(result, "rotate")
+      assert ".spinner" in result["rotate"]["used_by"]
+    end
+
+    test "handles keyframes without usage" do
+      # Given: CSS with keyframes that aren't used
+      css_code = """
+      @keyframes unused-animation {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+
+      .static {
+        color: blue;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Keyframes should be extracted with empty used_by
+      assert Map.has_key?(result, "unused-animation")
+      assert Enum.empty?(result["unused-animation"]["used_by"])
+    end
+
+    test "handles animations without keyframes" do
+      # Given: CSS with animation reference but no keyframes
+      css_code = """
+      .element {
+        animation: non-existent-animation 1s;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: No animations should be extracted (or empty map)
+      assert result == %{} or Enum.empty?(result)
+    end
+
+    test "handles CSS with no animations" do
+      # Given: CSS without any animations
+      css_code = """
+      .header {
+        color: blue;
+      }
+
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Extracting animations
+      {:ok, _, result} = Parser.extract_animations(css_code)
+
+      # Then: Result should be an empty map
+      assert result == %{}
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = "@keyframes broken { 0% { opacity: 0; missing-closing-brace;"
+
+      # When: Extracting animations
+      {:error, _, error_message} = Parser.extract_animations(css_code)
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+  end
 end
