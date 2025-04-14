@@ -48,57 +48,6 @@ defmodule IgniterJs.CSS.CssProcessor do
   end
 
   @doc """
-  Processes CSS for development with beautification and analytics.
-
-  ## Parameters
-
-    * `css_content` - The CSS content as a string
-    * `html_content` - Optional HTML content to check for unused selectors
-
-  ## Returns
-
-  A map with the processed CSS and analysis information:
-
-  ```
-  %{
-    beautified_css: "the beautified CSS",
-    analytics: %{...CSS analytics...},
-    unused_selectors: [...list of unused selectors...],
-    colors_used: %{...map of colors...},
-    fonts: %{...font information...}
-  }
-  ```
-  """
-  def process_for_development(css_content, html_content \\ nil) do
-    # Start with beautification
-    beautified = Parser.beautify(css_content)
-
-    # Collect analytics
-    analytics = Parser.analyze_css(css_content)
-
-    # Extract colors and fonts
-    colors = Parser.extract_colors(css_content)
-    fonts = Parser.extract_fonts(css_content)
-
-    # Find unused selectors if HTML is provided
-    unused_selectors =
-      if html_content do
-        Parser.find_unused_selectors(css_content, html_content)
-      else
-        []
-      end
-
-    # Return results
-    %{
-      beautified_css: beautified,
-      analytics: analytics,
-      unused_selectors: unused_selectors,
-      colors_used: colors,
-      fonts: fonts
-    }
-  end
-
-  @doc """
   Applies browser compatibility fixes to CSS.
 
   Makes CSS work across browsers by:

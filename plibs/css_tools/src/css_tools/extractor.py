@@ -433,43 +433,88 @@ def extract_unused_selectors(css: Union[str, bytes], html_content: str) -> List[
 
 def extract_fonts(css: Union[str, bytes]) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Extract all font-related properties.
+    Extract all font-related properties, including those in nested rules and media queries.
 
     Args:
         css: The CSS code as string or bytes
 
     Returns:
         Dictionary mapping selectors to their font properties
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed or has invalid syntax
     """
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
+    # Parse CSS for analysis
     rules = parse_stylesheet(css)
+
+    # Check for parse errors
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
+
+    # Validate declarations
+    for rule in rules:
+        if rule.type == "qualified-rule":
+            declarations = get_rule_declarations(rule)
+            for decl in declarations:
+                if decl.type == "error":
+                    raise Exception(f"CSS parse error in declaration: {getattr(decl, 'message', 'Unknown error')}")
+
     fonts = {}
 
+    # List of font-related properties
     font_properties = [
         'font', 'font-family', 'font-size', 'font-weight', 'font-style',
         'font-variant', 'line-height', 'text-transform', 'letter-spacing'
     ]
 
-    for rule in rules:
-        if rule.type == "qualified-rule":
-            selector = get_selector_text(rule)
-            declarations = get_rule_declarations(rule)
+    # Recursive function to process rules
+    def process_rules(rule_list, parent_selector=""):
+        for rule in rule_list:
+            if rule.type == "qualified-rule":
+                selector = get_selector_text(rule)
+                # Handle nested selectors by combining with parent selector
+                full_selector = f"{parent_selector} {selector}".strip() if parent_selector else selector
+                
+                declarations = get_rule_declarations(rule)
+                font_decls = []
+                
+                for decl in declarations:
+                    if decl.type == "declaration" and decl.name in font_properties:
+                        value = tinycss2.serialize(decl.value).strip()
+                        font_decls.append({
+                            "property": decl.name,
+                            "value": value
+                        })
 
-            font_decls = []
-            for decl in declarations:
-                if decl.type == "declaration" and decl.name in font_properties:
-                    value = tinycss2.serialize(decl.value).strip()
-                    font_decls.append({
-                        "property": decl.name,
-                        "value": value
-                    })
+                if font_decls:
+                    if full_selector not in fonts:
+                        fonts[full_selector] = []
+                    fonts[full_selector].extend(font_decls)
 
-            if font_decls:
-                if selector not in fonts:
-                    fonts[selector] = []
-                fonts[selector].extend(font_decls)
+                # Process nested rules within this rule
+                if hasattr(rule, 'content') and rule.content:
+                    nested_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                    process_rules(nested_rules, full_selector)
+
+            # Process media queries and other at-rules with nested content
+            elif rule.type == "at-rule" and rule.content is not None:
+                # For media queries, we want to keep the selector as is
+                if rule.lower_at_keyword == "media":
+                    # Parse nested rules
+                    nested_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                    # Process nested rules with the same parent selector
+                    process_rules(nested_rules, parent_selector)
+                else:
+                    # For other at-rules, we want to combine the selectors
+                    nested_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                    process_rules(nested_rules, parent_selector)
+
+    # Start processing rules
+    process_rules(rules)
 
     return fonts
 
