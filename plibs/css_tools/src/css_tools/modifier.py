@@ -146,7 +146,7 @@ def remove_property_from_selector(
     return modified_css.strip()
 
 
-def remove_selector(css: Union[str, bytes], selector: str) -> str:
+def remove_selector(css: Union[str, bytes], selector: Union[str, bytes]) -> str:
     """
     Remove a CSS selector and all its properties.
 
@@ -156,31 +156,67 @@ def remove_selector(css: Union[str, bytes], selector: str) -> str:
 
     Returns:
         Modified CSS as a string
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
     """
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
+    # Ensure selector is also a string, not bytes
+    if isinstance(selector, bytes):
+        selector = selector.decode('utf-8')
+
+    # Validate CSS syntax before proceeding
+    # Check for unbalanced braces - a common CSS error
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
+    # Parse CSS for further analysis
     rules = parse_stylesheet(css)
-    modified_css = ""
 
+    # Check for parse errors
     for rule in rules:
-        if rule.type == "qualified-rule":
-            rule_selector = get_selector_text(rule)
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
 
-            if rule_selector != selector:
-                # Keep rules that don't match the selector to be removed
-                declarations = get_rule_declarations(rule)
-                serialized_content = tinycss2.serialize(declarations).strip()
-                serialized_content = "\n".join("    " + line.strip() for line in serialized_content.splitlines() if line.strip())
-                formatted_rule = f"{rule_selector} {{\n{serialized_content}\n}}\n"
-                modified_css += formatted_rule
+    # Function to process rule blocks with potential nesting
+    def process_rule_block(rules):
+        result = ""
+        for rule in rules:
+            if rule.type == "qualified-rule":
+                rule_selector = get_selector_text(rule)
+                if rule_selector != selector:
+                    # Keep rules that don't match the selector to be removed
+                    declarations = get_rule_declarations(rule)
+                    serialized_content = tinycss2.serialize(declarations).strip()
+                    serialized_content = "\n".join("    " + line.strip() for line in serialized_content.splitlines() if line.strip())
+                    formatted_rule = f"{rule_selector} {{\n{serialized_content}\n}}\n"
+                    result += formatted_rule
+            elif rule.type == "at-rule" and rule.content is not None:
+                # Handle at-rules with blocks (e.g., media queries)
+                at_keyword = rule.at_keyword
+                prelude = tinycss2.serialize(rule.prelude).strip()
 
-        else:
-            # Keep other rules as they are
-            modified_css += tinycss2.serialize([rule])
+                # Parse the content of the at-rule
+                inner_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+
+                # Process the inner rules recursively
+                inner_content = process_rule_block(inner_rules)
+
+                # Only include the at-rule if it has content after processing
+                if inner_content.strip():
+                    result += f"@{at_keyword} {prelude} {{\n{inner_content}\n}}\n"
+            else:
+                # Keep other rules as they are
+                result += tinycss2.serialize([rule])
+
+        return result
+
+    # Start processing from the top level
+    modified_css = process_rule_block(rules)
 
     return modified_css.strip()
-
 
 def modify_property_value(
     css: Union[str, bytes],

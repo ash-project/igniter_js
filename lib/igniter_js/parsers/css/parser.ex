@@ -461,25 +461,49 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   @doc """
   Removes a CSS selector and all its properties.
+  **Note**: If a block is empty after removal, it will be removed as well.
 
   ## Examples
-
-      iex> IgniterJs.Parsers.CSS.Parser.remove_selector(css_code, ".unused-class")
-      "css without .unused-class"
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.remove_selector(css_code, ".unused-class")
+  "css without .unused-class"
+  ```
   """
-  def remove_selector(css_code, selector) when is_binary(css_code) and is_binary(selector) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.modifier import remove_selector
+  def remove_selector(file_path_or_content, selector, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.modifier import remove_selector
 
-        result = remove_selector(css_code, selector)
-        result
-        """,
-        %{"css_code" => css_code, "selector" => selector}
-      )
+            try:
+              modified_css = remove_selector(css_code, selector)
+              result = {"status": "ok", "result": modified_css}
 
-    Pythonx.decode(result)
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{"css_code" => file_content, "selector" => selector}
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => analyzed_css} ->
+            {:ok, __ENV__.function, analyzed_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """

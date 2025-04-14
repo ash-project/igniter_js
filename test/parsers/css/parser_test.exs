@@ -1201,4 +1201,248 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       end
     end
   end
+
+  describe "remove_selector/2" do
+    test "removes a basic selector from CSS" do
+      # Given: CSS with multiple selectors
+      css_code = """
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+
+      .content {
+        padding: 20px;
+        margin: 10px;
+      }
+      """
+
+      # When: Removing one selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".header")
+
+      # Then: The specified selector should be removed
+      refute String.contains?(result, ".header")
+      refute String.contains?(result, "color: blue")
+      refute String.contains?(result, "font-size: 16px")
+
+      # Other selectors should be preserved
+      assert String.contains?(result, ".content")
+      assert String.contains?(result, "padding: 20px")
+      assert String.contains?(result, "margin: 10px")
+    end
+
+    test "handles complex selectors" do
+      # Given: CSS with complex selectors
+      css_code = """
+      .parent > .child {
+        color: red;
+      }
+
+      .sibling + .adjacent {
+        margin-left: 10px;
+      }
+      """
+
+      # When: Removing a complex selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".parent > .child")
+
+      # Then: The complex selector should be removed
+      refute String.contains?(result, ".parent > .child")
+      refute String.contains?(result, "color: red")
+
+      # Other selectors should be preserved
+      assert String.contains?(result, ".sibling + .adjacent")
+      assert String.contains?(result, "margin-left: 10px")
+    end
+
+    test "handles selectors with pseudo-classes" do
+      # Given: CSS with pseudo-class selectors
+      css_code = """
+      .button:hover {
+        background-color: blue;
+      }
+
+      .link:visited {
+        color: purple;
+      }
+      """
+
+      # When: Removing a selector with pseudo-class
+      {:ok, _, result} = Parser.remove_selector(css_code, ".button:hover")
+
+      # Then: The selector with pseudo-class should be removed
+      refute String.contains?(result, ".button:hover")
+      refute String.contains?(result, "background-color: blue")
+
+      # Other selectors should be preserved
+      assert String.contains?(result, ".link:visited")
+      assert String.contains?(result, "color: purple")
+    end
+
+    test "handles removing a selector from a media query" do
+      # Given: CSS with selectors inside media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          display: block;
+        }
+
+        .tablet {
+          display: none;
+        }
+      }
+      """
+
+      # When: Removing a selector from a media query
+      {:ok, _, result} = Parser.remove_selector(css_code, ".mobile")
+      # Then: The selector should be removed from the media query
+      refute String.contains?(result, ".mobile")
+      refute String.contains?(result, "display: block")
+
+      # Media query and other selectors should be preserved
+      assert String.contains?(result, "@media (max-width: 768px)")
+      assert String.contains?(result, ".tablet")
+      assert String.contains?(result, "display: none")
+    end
+
+    test "maintains empty media queries after removing all selectors" do
+      # Given: CSS with a single selector in a media query
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          display: block;
+        }
+      }
+      """
+
+      # When: Removing the only selector from the media query
+      # If there is no child selector, the media query should be removed
+      {:ok, _, result} = Parser.remove_selector(css_code, ".mobile")
+
+      # Then: The media query should still exist but be empty
+      assert String.contains?(result, "")
+      refute String.contains?(result, ".mobile")
+      refute String.contains?(result, "display: block")
+    end
+
+    test "handles removing selector with multiple declarations" do
+      # Given: CSS with a selector having multiple declarations
+      css_code = """
+      .multiline {
+        color: red;
+        font-size: 16px;
+        margin: 10px;
+        padding: 5px;
+        border: 1px solid black;
+      }
+      """
+
+      # When: Removing the selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".multiline")
+
+      # Then: The entire selector block should be removed
+      refute String.contains?(result, ".multiline")
+      refute String.contains?(result, "color: red")
+      refute String.contains?(result, "font-size: 16px")
+      refute String.contains?(result, "margin: 10px")
+      refute String.contains?(result, "padding: 5px")
+      refute String.contains?(result, "border: 1px solid black")
+    end
+
+    test "handles non-existent selector" do
+      # Given: CSS without the target selector
+      css_code = """
+      .header {
+        color: blue;
+      }
+      """
+
+      # When: Removing a non-existent selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".non-existent")
+
+      # Then: The CSS should remain unchanged
+      assert elem(Parser.beautify(result), 2) == elem(Parser.beautify(css_code), 2)
+      assert String.contains?(result, ".header")
+      assert String.contains?(result, "color: blue")
+    end
+
+    test "handles multiple occurrences of the same selector" do
+      # Given: CSS with multiple occurrences of the same selector
+      css_code = """
+      .duplicate {
+        color: red;
+      }
+
+      .other {
+        margin: 10px;
+      }
+
+      .duplicate {
+        font-size: 16px;
+      }
+      """
+
+      # When: Removing the duplicate selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".duplicate")
+
+      # Then: All occurrences of the selector should be removed
+      refute String.contains?(result, ".duplicate")
+      refute String.contains?(result, "color: red")
+      refute String.contains?(result, "font-size: 16px")
+
+      # Other selectors should be preserved
+      assert String.contains?(result, ".other")
+      assert String.contains?(result, "margin: 10px")
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Removing a selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".header")
+
+      # Then: The result should still be empty
+      assert result == ""
+    end
+
+    test "handles CSS with comments" do
+      # Given: CSS with comments
+      css_code = """
+      /* Header styles */
+      .header {
+        color: blue;
+      }
+
+      /* Content styles */
+      .content {
+        padding: 20px;
+      }
+      """
+
+      # When: Removing a selector
+      {:ok, _, result} = Parser.remove_selector(css_code, ".header")
+
+      # Then: The selector should be removed
+      refute String.contains?(result, ".header")
+      refute String.contains?(result, "color: blue")
+
+      # Comments for other selectors should be preserved
+      assert String.contains?(result, "/* Content styles */")
+      assert String.contains?(result, ".content")
+      assert String.contains?(result, "padding: 20px")
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = ".invalid { color: red; missing-closing-brace;"
+
+      # When: Removing a selector
+      {:error, _, error_message} = Parser.remove_selector(css_code, ".invalid")
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+  end
 end
