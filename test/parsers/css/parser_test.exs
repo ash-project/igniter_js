@@ -482,4 +482,179 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert "screen and (min-width: 800px)" in Map.values(result["import_media_queries"])
     end
   end
+
+  describe "extract_colors/1" do
+    test "extracts hex color values" do
+      # Given: CSS with hex color values
+      css_code = """
+      .header {
+        color: #333;
+        background-color: #f5f5f5;
+      }
+      .button {
+        color: #fff;
+        background-color: #007bff;
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: Colors should be properly extracted and organized by selector
+      assert is_map(result)
+      assert Map.has_key?(result, ".header")
+      assert Map.has_key?(result, ".button")
+
+      assert "color: #333" in result[".header"]
+      assert "background-color: #f5f5f5" in result[".header"]
+      assert "color: #fff" in result[".button"]
+      assert "background-color: #007bff" in result[".button"]
+    end
+
+    test "extracts rgb and rgba color values" do
+      # Given: CSS with RGB and RGBA color values
+      css_code = """
+      .container {
+        color: rgb(51, 51, 51);
+        background-color: rgba(255, 255, 255, 0.8);
+      }
+      .overlay {
+        background-color: rgba(0, 0, 0, 0.5);
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: RGB and RGBA colors should be properly extracted
+      assert is_map(result)
+      assert Map.has_key?(result, ".container")
+      assert Map.has_key?(result, ".overlay")
+
+      assert "color: rgb(51, 51, 51)" in result[".container"]
+      assert "background-color: rgba(255, 255, 255, 0.8)" in result[".container"]
+      assert "background-color: rgba(0, 0, 0, 0.5)" in result[".overlay"]
+    end
+
+    test "extracts named color values" do
+      # Given: CSS with named color values
+      css_code = """
+      .success {
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+      .info {
+        color: blue;
+        background-color: white;
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: Named colors should be properly extracted
+      assert is_map(result)
+      assert "color: green" in result[".success"]
+      assert "color: red" in result[".error"]
+      assert "color: blue" in result[".info"]
+      assert "background-color: white" in result[".info"]
+    end
+
+    test "extracts hsl and hsla color values" do
+      # Given: CSS with HSL and HSLA color values
+      css_code = """
+      .hsl-colors {
+        color: hsl(120, 100%, 50%);
+        background-color: hsla(240, 100%, 50%, 0.5);
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: HSL and HSLA colors should be properly extracted
+      assert is_map(result)
+      assert "color: hsl(120, 100%, 50%)" in result[".hsl-colors"]
+      assert "background-color: hsla(240, 100%, 50%, 0.5)" in result[".hsl-colors"]
+    end
+
+    test "extracts colors from shorthand properties" do
+      # Given: CSS with shorthand properties containing colors
+      css_code = """
+      .shorthand {
+        border: 1px solid #ccc;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: Colors in shorthand properties should be extracted
+      assert is_map(result)
+      assert Map.has_key?(result, ".shorthand")
+
+      assert Enum.any?(result[".shorthand"], fn color ->
+               String.contains?(color, "#ccc") and String.contains?(color, "border")
+             end)
+
+      assert Enum.any?(result[".shorthand"], fn color ->
+               String.contains?(color, "rgba(0, 0, 0, 0.3)") and
+                 String.contains?(color, "box-shadow")
+             end)
+    end
+
+    test "extracts colors from nested selectors" do
+      # Given: CSS with nested selectors (e.g., media queries)
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          color: #555;
+          background-color: #eee;
+        }
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: Colors from nested selectors should be properly extracted
+      assert is_map(result)
+      assert Map.has_key?(result, ".mobile")
+      assert "color: #555" in result[".mobile"]
+      assert "background-color: #eee" in result[".mobile"]
+    end
+
+    test "handles CSS with no colors" do
+      # Given: CSS without any color properties
+      css_code = """
+      .no-colors {
+        display: block;
+        margin: 10px;
+        padding: 20px;
+      }
+      """
+
+      # When: Extracting colors
+      {:ok, _, result} = Parser.extract_colors(css_code)
+
+      # Then: Result should be an empty map
+      assert is_map(result)
+      assert Enum.empty?(result)
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = ".invalid { color: red; missing-closing-brace;"
+
+      # When: Extracting colors
+      {:error, _, error_message} = Parser.extract_colors(css_code)
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+  end
 end

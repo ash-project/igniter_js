@@ -143,14 +143,16 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.analyze_css(css_code)
-      %{
-        "selectors_count" => 15,
-        "unique_selectors" => 12,
-        "properties_count" => 45,
-        "unique_properties" => 20,
-        ...
-      }
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.analyze_css(css_code)
+  %{
+    "selectors_count" => 15,
+    "unique_selectors" => 12,
+    "properties_count" => 45,
+    "unique_properties" => 20,
+    ...
+  }
+  ```
   """
   def analyze_css(file_path_or_content, type \\ :content) do
     call_nif_fn(
@@ -178,8 +180,8 @@ defmodule IgniterJs.Parsers.CSS.Parser do
         parsed_result = Pythonx.decode(result)
 
         case parsed_result do
-          %{"status" => "ok", "result" => modified_css} ->
-            {:ok, __ENV__.function, modified_css}
+          %{"status" => "ok", "result" => analyzed_css} ->
+            {:ok, __ENV__.function, analyzed_css}
 
           %{"status" => "error", "message" => message} ->
             {:error, __ENV__.function, message}
@@ -194,25 +196,50 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.extract_colors(css_code)
-      %{
-        ".header" => ["color: #333", "background-color: white"],
-        ".footer" => ["color: rgba(0, 0, 0, 0.8)"]
-      }
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.extract_colors(css_code)
+  %{
+    ".header" => ["color: #333", "background-color: white"],
+    ".footer" => ["color: rgba(0, 0, 0, 0.8)"]
+  }
+  ```
   """
-  def extract_colors(css_code) when is_binary(css_code) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.extractor import extract_colors
+  def extract_colors(file_path_or_content, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.extractor import extract_colors
 
-        result = extract_colors(css_code)
-        result
-        """,
-        %{"css_code" => css_code}
-      )
+            try:
+              analyze_css = extract_colors(css_code)
 
-    Pythonx.decode(result)
+              result = {"status": "ok", "result": analyze_css}
+
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{"css_code" => file_content}
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => analyzed_css} ->
+            {:ok, __ENV__.function, analyzed_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """

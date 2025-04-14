@@ -8,18 +8,32 @@ from .parser import parse_stylesheet, get_selector_text, get_rule_declarations
 
 def extract_colors(css: Union[str, bytes]) -> Dict[str, List[str]]:
     """
-    Extract all color values from CSS.
+    Extract all color values from CSS, including those in nested selectors.
 
     Args:
         css: The CSS code as string or bytes
 
     Returns:
         Dictionary mapping selectors to their color properties
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
     """
     if isinstance(css, bytes):
         css = css.decode('utf-8')
 
+    # Validate CSS syntax before proceeding
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
+    # Parse CSS for analysis
     rules = parse_stylesheet(css)
+
+    # Check for parse errors
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
+
     colors = {}
 
     # Regular expressions for different color formats
@@ -35,34 +49,42 @@ def extract_colors(css: Union[str, bytes]) -> Dict[str, List[str]]:
         'outline-color', 'text-decoration-color', 'box-shadow', 'text-shadow'
     ]
 
-    for rule in rules:
-        if rule.type == "qualified-rule":
-            selector = get_selector_text(rule)
-            declarations = get_rule_declarations(rule)
+    # Recursive function to process rules
+    def process_rules(rule_list):
+        for rule in rule_list:
+            if rule.type == "qualified-rule":
+                selector = get_selector_text(rule)
+                declarations = get_rule_declarations(rule)
+                for decl in declarations:
+                    if decl.type == "declaration":
+                        value = tinycss2.serialize(decl.value).strip()
+                        # Check if it's a color property or has a color value
+                        is_color_property = decl.name in color_properties
+                        has_color_value = (
+                            re.search(hex_pattern, value) or
+                            re.search(rgb_pattern, value) or
+                            re.search(rgba_pattern, value) or
+                            re.search(hsl_pattern, value) or
+                            re.search(hsla_pattern, value) or
+                            value in ['black', 'white', 'red', 'green', 'blue', 'yellow',
+                                     'purple', 'orange', 'brown', 'gray', 'transparent']
+                        )
+                        if is_color_property or has_color_value:
+                            if selector not in colors:
+                                colors[selector] = []
+                            colors[selector].append(f"{decl.name}: {value}")
 
-            for decl in declarations:
-                if decl.type == "declaration":
-                    value = tinycss2.serialize(decl.value).strip()
+            # Process media queries and other at-rules with nested content
+            elif rule.type == "at-rule" and rule.content is not None:
+                # Parse nested rules
+                nested_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                # Recursively process nested rules
+                process_rules(nested_rules)
 
-                    # Check if it's a color property or has a color value
-                    is_color_property = decl.name in color_properties
-                    has_color_value = (
-                        re.search(hex_pattern, value) or
-                        re.search(rgb_pattern, value) or
-                        re.search(rgba_pattern, value) or
-                        re.search(hsl_pattern, value) or
-                        re.search(hsla_pattern, value) or
-                        value in ['black', 'white', 'red', 'green', 'blue', 'yellow',
-                                 'purple', 'orange', 'brown', 'gray', 'transparent']
-                    )
-
-                    if is_color_property or has_color_value:
-                        if selector not in colors:
-                            colors[selector] = []
-                        colors[selector].append(f"{decl.name}: {value}")
+    # Start processing rules
+    process_rules(rules)
 
     return colors
-
 
 def extract_media_queries(css: Union[str, bytes]) -> Dict[str, List[Dict[str, Any]]]:
     """
