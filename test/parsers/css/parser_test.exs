@@ -283,4 +283,203 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "analyze_css/1" do
+    test "returns analysis for valid CSS with multiple selectors" do
+      # Given: CSS with multiple selectors, properties, and values
+      css_code = """
+      .header {
+        color: #333;
+        font-size: 16px;
+      }
+
+      #main-content {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 1200px;
+      }
+
+      .footer {
+        background-color: #f5f5f5;
+        padding: 20px;
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Result should include comprehensive analysis
+      assert is_map(result)
+      assert result["selectors_count"] == 3
+      assert result["properties_count"] >= 7
+      assert is_list(result["selectors"])
+      assert ".header" in result["selectors"]
+      assert "#main-content" in result["selectors"]
+      assert ".footer" in result["selectors"]
+
+      # Check for specific property values
+      assert ".header" in Map.keys(result["selector_properties"])
+      assert "#333" in Map.values(result["selector_properties"][".header"])
+    end
+
+    test "handles CSS with media queries" do
+      # Given: CSS with media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          display: block;
+          font-size: 14px;
+        }
+      }
+
+      @media print {
+        .no-print {
+          display: none;
+        }
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Media queries should be properly analyzed
+      assert is_map(result)
+
+      assert result["media_queries_count"] == 2
+    end
+
+    test "analyzes CSS with complex selectors" do
+      # Given: CSS with complex selectors
+      css_code = """
+      .parent > .child {
+        color: blue;
+      }
+
+      .sibling + .adjacent {
+        margin-left: 10px;
+      }
+
+      ul li:hover {
+        background-color: #f0f0f0;
+      }
+
+      input[type="text"] {
+        border: 1px solid #ccc;
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Complex selectors should be analyzed correctly
+      assert is_map(result)
+      assert result["selectors_count"] == 4
+      assert ".parent > .child" in result["selectors"]
+      assert ".sibling + .adjacent" in result["selectors"]
+      assert "ul li:hover" in result["selectors"]
+
+      assert "input[type=\"text\"]" in result["selectors"] or
+               "input[type=\"text\"]" in result["selectors"]
+    end
+
+    test "analyzes CSS for color usage" do
+      # Given: CSS with various color formats
+      css_code = """
+      .hex-color {
+        color: #ff0000;
+      }
+
+      .rgb-color {
+        color: rgb(0, 128, 255);
+      }
+
+      .rgba-color {
+        background-color: rgba(255, 255, 255, 0.8);
+      }
+
+      .named-color {
+        border-color: blue;
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Color analysis should be included
+
+      assert result["colors_used"] >= 4
+    end
+
+    test "analyzes empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Analysis should handle empty CSS gracefully
+      assert is_map(result)
+      assert result["selectors_count"] == 0
+      assert result["properties_count"] == 0
+      assert length(result["selectors"]) == 0
+    end
+
+    test "analyzes CSS with comments" do
+      css_code = """
+      /* Header styles */
+      .header {
+        color: black;
+      }
+
+      /* Main content area */
+      .content {
+        /* Inner padding */
+        padding: 20px;
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Comments should be properly analyzed
+      assert result["comments_count"] >= 2
+    end
+
+    test "handles invalid CSS" do
+      # Given: Invalid CSS
+      css_code = ".invalid { color: red; missing-closing-brace;"
+
+      # When: Analyzing the CSS
+      {:error, _, error_message} = Parser.analyze_css(css_code)
+
+      # Then: Should return an error
+      assert is_binary(error_message)
+      assert String.contains?(error_message, "Failed to parse CSS")
+    end
+
+    test "analyzes CSS with imports" do
+      # Given: CSS with import statements
+      css_code = """
+      @import url('fonts.css');
+      @import 'typography.css' screen and (min-width: 800px);
+
+      .content {
+        font-family: 'Open Sans', sans-serif;
+      }
+      """
+
+      # When: Analyzing the CSS
+      {:ok, _, result} = Parser.analyze_css(css_code)
+
+      # Then: Import statements should be analyzed
+      assert result["imports_count"] == 2
+      assert "fonts.css" in result["imports"]
+      assert "typography.css" in result["imports"]
+
+      # Check media queries for imports
+      assert is_map(result["import_media_queries"])
+      assert "typography.css" in Map.keys(result["import_media_queries"])
+      assert "screen and (min-width: 800px)" in Map.values(result["import_media_queries"])
+    end
+  end
 end
