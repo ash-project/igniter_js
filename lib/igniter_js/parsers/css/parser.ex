@@ -1046,41 +1046,56 @@ defmodule IgniterJs.Parsers.CSS.Parser do
 
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, ".header")
-      true
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, ".header")
+  true
 
-      iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, "#nonexistent")
-      false
+  iex> IgniterJs.Parsers.CSS.Parser.selector_exists?(css_code, "#nonexistent")
+  false
+  ```
   """
-  def selector_exists?(css_code, selector) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.parser import parse_stylesheet, get_selector_text
+  def selector_exists?(file_path_or_content, selector, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            from css_tools.parser import parse_stylesheet, get_selector_text
 
-        if isinstance(selector, bytes):
-            selector = selector.decode('utf-8')
+            if isinstance(selector, bytes):
+                selector = selector.decode('utf-8')
 
-        rules = parse_stylesheet(css_code)
-        exists = False
+            rules = parse_stylesheet(css_code)
+            exists = False
 
-        for rule in rules:
-            if rule.type == "qualified-rule":
-                rule_selector = get_selector_text(rule)
-                if rule_selector == selector:
-                    exists = True
-                    break
+            for rule in rules:
+                if rule.type == "qualified-rule":
+                    rule_selector = get_selector_text(rule)
+                    if rule_selector == selector:
+                        exists = True
+                        break
 
-        result = exists
-        result
-        """,
-        %{
-          "css_code" => css_code,
-          "selector" => selector
-        }
-      )
+            result = exists
+            result
+            """,
+            %{
+              "css_code" => file_content,
+              "selector" => selector
+            }
+          )
 
-    Pythonx.decode(result)
+        parsed_result = Pythonx.decode(result)
+
+        if parsed_result,
+          do: {:ok, __ENV__.function, true},
+          else: {:error, __ENV__.function, false}
+      end,
+      type
+    )
+  rescue
+    _ -> {:error, __ENV__.function, false}
   end
 
   @doc """

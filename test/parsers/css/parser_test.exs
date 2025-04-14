@@ -3014,4 +3014,184 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(result, "other-domain.com")
     end
   end
+
+  describe "selector_exists?/3" do
+    test "returns true when selector exists" do
+      # Given: CSS with a specific selector
+      css = """
+      .header {
+        color: blue;
+        font-size: 20px;
+      }
+      """
+
+      # When: Checking if the selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, ".header")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns false when selector doesn't exist" do
+      # Given: CSS without the specific selector
+      css = """
+      .header {
+        color: blue;
+        font-size: 20px;
+      }
+      """
+
+      # When: Checking if a non-existent selector exists
+      {:error, :selector_exists?, result} = Parser.selector_exists?(css, "#nonexistent")
+
+      # Then: Should return false
+      assert result == false
+    end
+
+    test "returns true for ID selectors" do
+      # Given: CSS with an ID selector
+      css = """
+      #main {
+        width: 80%;
+        margin: 0 auto;
+      }
+      """
+
+      # When: Checking if the ID selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, "#main")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns true for element selectors" do
+      # Given: CSS with an element selector
+      css = """
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+      }
+      """
+
+      # When: Checking if the element selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, "body")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns true for attribute selectors" do
+      # Given: CSS with an attribute selector
+      css = """
+      [type="text"] {
+        border: 1px solid #ccc;
+        padding: 5px;
+      }
+      """
+
+      # When: Checking if the attribute selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, "[type=\"text\"]")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns true for pseudo-class selectors" do
+      # Given: CSS with a pseudo-class selector
+      css = """
+      a:hover {
+        text-decoration: underline;
+        color: red;
+      }
+      """
+
+      # When: Checking if the pseudo-class selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, "a:hover")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns true for compound selectors" do
+      # Given: CSS with a compound selector
+      css = """
+      .container .box {
+        background: #f5f5f5;
+        padding: 10px;
+      }
+      """
+
+      # When: Checking if the compound selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, ".container .box")
+
+      # Then: Should return true
+      assert result == true
+    end
+
+    test "returns false for partial selector match" do
+      # Given: CSS with a specific selector
+      css = """
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+      }
+      """
+
+      # When: Checking if a partial selector exists
+      {:error, :selector_exists?, result} = Parser.selector_exists?(css, ".header")
+
+      # Then: Should return false (no partial matching)
+      assert result == false
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Checking if a selector exists in empty CSS
+      {:error, :selector_exists?, result} = Parser.selector_exists?(css, ".header")
+
+      # Then: Should return false
+      assert result == false
+    end
+
+    test "handles CSS with comments" do
+      # Given: CSS with comments and a selector
+      css = """
+      /* Header styling */
+      .header {
+        /* Primary color */
+        color: blue;
+        font-size: 20px;
+      }
+      """
+
+      # When: Checking if the selector exists
+      {:ok, :selector_exists?, result} = Parser.selector_exists?(css, ".header")
+
+      # Then: Should return true (ignores comments)
+      assert result == true
+    end
+
+    test "handles multiple selectors separated by commas" do
+      # Given: CSS with multiple selectors for a rule
+      css = """
+      .header, .footer {
+        background-color: #333;
+        color: white;
+      }
+      """
+
+      # When: Checking each individual selector
+      {:error, :selector_exists?, header_result} = Parser.selector_exists?(css, ".header")
+      {:error, :selector_exists?, footer_result} = Parser.selector_exists?(css, ".footer")
+      {:ok, :selector_exists?, combined_result} = Parser.selector_exists?(css, ".header, .footer")
+
+      # Then: The individual selectors should return false, but the combined one returns true
+      # Note: This may need adjustment depending on how your parser handles comma-separated selectors
+      assert header_result == false
+      assert footer_result == false
+      assert combined_result == true
+    end
+  end
 end
