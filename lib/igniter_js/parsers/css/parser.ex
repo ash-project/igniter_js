@@ -766,30 +766,6 @@ defmodule IgniterJs.Parsers.CSS.Parser do
   end
 
   @doc """
-  Finds and extracts unused CSS selectors by comparing with HTML content.
-
-  ## Examples
-
-      iex> IgniterJs.Parsers.CSS.Parser.find_unused_selectors(css_code, html_content)
-      [".unused-class", "#unused-id"]
-  """
-  def find_unused_selectors(css_code, html_content)
-      when is_binary(css_code) and is_binary(html_content) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.extractor import extract_unused_selectors
-
-        result = extract_unused_selectors(css_code, html_content)
-        result
-        """,
-        %{"css_code" => css_code, "html_content" => html_content}
-      )
-
-    Pythonx.decode(result)
-  end
-
-  @doc """
   Extracts all font-related properties from CSS.
 
   ## Examples
