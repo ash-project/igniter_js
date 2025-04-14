@@ -6,6 +6,8 @@ defmodule IgniterJs.Parsers.CSS.Parser do
   a Python toolkit built on tinycss2 for parsing, modifying, and analyzing CSS.
   """
 
+  import IgniterJs.Helpers, only: [call_nif_fn: 4]
+
   @doc """
   Adds a display: none property to the .hide-scrollbar class.
   If the class doesn't exist, it creates it.
@@ -15,24 +17,52 @@ defmodule IgniterJs.Parsers.CSS.Parser do
       iex> IgniterJs.Parsers.CSS.Parser.add_hide_scrollbar_property(css_code)
       updated css with .hide-scrollbar having display: none
   """
-  def add_hide_scrollbar_property(css_code) when is_binary(css_code) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.modifier import add_property_to_selector
+  def add_hide_scrollbar_property(file_path_or_content, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            import tinycss2
+            from css_tools.modifier import add_property_to_selector
 
-        result = add_property_to_selector(
-            css_code,
-            ".hide-scrollbar",
-            "display",
-            "none"
-        )
-        result
-        """,
-        %{"css_code" => css_code}
-      )
+            try:
+                # Ensure css_code is a string
+                if isinstance(css_code, bytes):
+                    css_code = css_code.decode('utf-8')
 
-    Pythonx.decode(result)
+                # Try the modification
+                modified_css = add_property_to_selector(
+                    css_code,
+                    ".hide-scrollbar",
+                    "display",
+                    "none"
+                )
+                result = {"status": "ok", "result": modified_css}
+
+            except Exception as e:
+                # Return any errors in a structured format
+                result = {"status": "error", "message": f"Failed to parse CSS: {str(e)}"}
+
+            result
+            """,
+            %{"css_code" => file_content}
+          )
+
+        parsed_result = Pythonx.decode(result)
+
+        case parsed_result do
+          %{"status" => "ok", "result" => modified_css} ->
+            {:ok, :add_hide_scrollbar_property, modified_css}
+
+          %{"status" => "error", "message" => message} ->
+            {:error, :add_hide_scrollbar_property, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """
