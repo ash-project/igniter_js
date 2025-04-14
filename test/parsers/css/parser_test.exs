@@ -2742,4 +2742,127 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       end
     end
   end
+
+  describe "add_import/4" do
+    test "adds import to empty CSS" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Adding an import
+      {:ok, :add_import, result} = Parser.add_import(css, "styles.css", false)
+
+      # Then: Import should be added correctly
+      assert result == "@import 'styles.css';"
+    end
+
+    test "adds import with URL" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Adding an import with absolute URL
+      {:ok, :add_import, result} = Parser.add_import(css, "https://example.com/styles.css", false)
+
+      # Then: Import should be added with url() syntax
+      assert result == "@import url('https://example.com/styles.css');"
+    end
+
+    test "adds import with media query" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Adding an import with a media query
+      {:ok, :add_import, result} =
+        Parser.add_import(css, "mobile.css", "screen and (max-width: 768px)")
+
+      # Then: Import should include the media query
+      assert result == "@import 'mobile.css' screen and (max-width: 768px);"
+    end
+
+    test "adds import to CSS with existing rules" do
+      # Given: CSS with existing rules
+      css = """
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Adding an import
+      {:ok, :add_import, result} = Parser.add_import(css, "styles.css", false)
+
+      # Then: Import should be added at the beginning
+      assert String.starts_with?(result, "@import 'styles.css';")
+      assert String.contains?(result, "body {")
+    end
+
+    test "adds import after existing imports" do
+      # Given: CSS with an existing import
+      css = """
+      @import 'base.css';
+
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Adding a new import
+      {:ok, :add_import, result} = Parser.add_import(css, "styles.css", false)
+
+      # Then: New import should be after the existing import
+      assert String.contains?(result, "@import \"base.css\"")
+      assert String.contains?(result, "@import 'styles.css';")
+    end
+
+    test "doesn't add duplicate imports" do
+      # Given: CSS with an existing import
+      css = """
+      @import 'styles.css';
+
+      body {
+        font-size: 16px;
+      }
+      """
+
+      # When: Trying to add the same import again
+      {:ok, :add_import, result} = Parser.add_import(css, "styles.css", false)
+
+      # Then: The CSS should remain unchanged
+
+      assert elem(Parser.beautify(result), 2) == elem(Parser.beautify(css), 2)
+
+      # And there should only be one occurrence of the import
+      assert result |> String.split("@import 'styles.css';") |> length() == 2
+    end
+
+    test "validates CSS before adding import" do
+      # Given: Invalid CSS with missing semicolon
+      css = """
+      body {
+        color: red
+        font-size: 16px;
+      }
+      """
+
+      # When: Trying to add an import to invalid CSS
+      {:error, :add_import, error_message} = Parser.add_import(css, "styles.css", false)
+
+      # Then: Should return a validation error
+      assert error_message =~ "Missing semicolon"
+    end
+
+    test "validates CSS with unbalanced braces" do
+      # Given: Invalid CSS with unbalanced braces
+      css = """
+      body {
+        color: red;
+        font-size: 16px;
+
+      """
+
+      # When: Trying to add an import to invalid CSS
+      {:error, :add_import, error_message} = Parser.add_import(css, "styles.css", false)
+
+      # Then: Should return a validation error about braces
+      assert error_message =~ "Unbalanced braces"
+    end
+  end
 end
