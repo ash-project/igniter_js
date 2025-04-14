@@ -714,107 +714,55 @@ defmodule IgniterJs.Parsers.CSS.Parser do
   end
 
   @doc """
-  Extracts all selectors that use a specific CSS property.
-
-  ## Examples
-
-      iex> IgniterJs.Parsers.CSS.Parser.extract_selectors_by_property(css_code, "display")
-      %{
-        ".header" => "flex",
-        ".sidebar" => "none",
-        ".content" => "grid"
-      }
-  """
-  def extract_selectors_by_property(css_code, property_name)
-      when is_binary(css_code) and is_binary(property_name) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.extractor import extract_selectors_by_property
-
-        result = extract_selectors_by_property(css_code, property_name)
-        result
-        """,
-        %{"css_code" => css_code, "property_name" => property_name}
-      )
-
-    Pythonx.decode(result)
-  end
-
-  @doc """
-  Extracts all comments from CSS and associates them with nearby rules when possible.
-
-  ## Examples
-
-      iex> IgniterJs.Parsers.CSS.Parser.extract_comments(css_code)
-      %{
-        "standalone_comments" => ["This is a standalone comment"],
-        "rule_comments" => %{
-          ".header" => ["Header styles"]
-        },
-        "declaration_comments" => %{
-          ".footer" => %{
-            "color" => ["Footer text color"]
-          }
-        }
-      }
-  """
-  def extract_comments(css_code) when is_binary(css_code) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        from css_tools.extractor import extract_comments
-
-        result = extract_comments(css_code)
-        result
-        """,
-        %{"css_code" => css_code}
-      )
-
-    Pythonx.decode(result)
-  end
-
-  @doc """
   Checks if the CSS code is valid by attempting to parse it.
   Returns :ok if valid, or {:error, reason} if invalid.
-
   ## Examples
 
-      iex> IgniterJs.Parsers.CSS.Parser.validate_css(css_code)
-      :ok
+  ```elixir
+  iex> IgniterJs.Parsers.CSS.Parser.validate_css(css_code)
+  :ok
 
-      iex> IgniterJs.Parsers.CSS.Parser.validate_css("invalid { css")
-      {:error, "Parse error at line 1, column 10: Missing closing brace"}
+  iex> IgniterJs.Parsers.CSS.Parser.validate_css("invalid { css")
+  {:error, "Parse error at line 1, column 10: Missing closing brace"}
+  ```
   """
-  def validate_css(css_code) when is_binary(css_code) do
-    {result, _globals} =
-      Pythonx.eval(
-        """
-        import tinycss2
+  def validate_css(file_path_or_content, type \\ :content) do
+    call_nif_fn(
+      file_path_or_content,
+      __ENV__.function,
+      fn file_content ->
+        {result, _globals} =
+          Pythonx.eval(
+            """
+            import tinycss2
+            from css_tools.extractor import validate_css
 
-        try:
-            # Attempt to parse the CSS
-            parsed = tinycss2.parse_stylesheet(css_code)
-            # Check for obvious parsing errors
-            for rule in parsed:
-                if hasattr(rule, 'content') and isinstance(rule.content, str) and 'syntax error' in rule.content.lower():
-                    raise Exception(f"Parse error: {rule.content}")
-            result = {"valid": True, "message": "CSS is valid"}
-        except Exception as e:
-            result = {"valid": False, "message": str(e)}
+            try:
+                if isinstance(css_code, bytes):
+                    css_code = css_code.decode('utf-8')
+                # Use the validate_css function from extractor
+                validate_css(css_code)
+                result = {"valid": True, "message": "CSS is valid"}
+            except Exception as e:
+                result = {"valid": False, "message": str(e)}
 
-        result
-        """,
-        %{"css_code" => css_code}
-      )
+            result
+            """,
+            %{"css_code" => file_content}
+          )
 
-    parsed_result = Pythonx.decode(result)
+        parsed_result = Pythonx.decode(result)
 
-    if parsed_result["valid"] do
-      :ok
-    else
-      {:error, parsed_result["message"]}
-    end
+        case parsed_result do
+          %{"valid" => true} ->
+            {:ok, __ENV__.function, true}
+
+          %{"valid" => false, "message" => message} ->
+            {:error, __ENV__.function, message}
+        end
+      end,
+      type
+    )
   end
 
   @doc """

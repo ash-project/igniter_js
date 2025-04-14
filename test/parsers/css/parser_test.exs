@@ -2390,4 +2390,136 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       refute String.contains?(result, "content: \"old\"")
     end
   end
+
+  describe "validate_css/1" do
+    test "validates valid CSS string" do
+      # Given: Valid CSS string
+      css = """
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+      """
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+
+    test "validates valid CSS with media queries" do
+      # Given: Valid CSS with media queries
+      css = """
+      @media (max-width: 600px) {
+        .header {
+          font-size: 14px;
+        }
+      }
+      """
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+
+    test "validates valid CSS with nested rules" do
+      # Given: Valid CSS with nested rules
+      css = """
+      .container {
+        .header {
+          color: blue;
+        }
+        .content {
+          margin: 10px;
+        }
+      }
+      """
+
+      # When: Validating CSS
+      {:ok, _, true} = Parser.validate_css(css)
+    end
+
+    test "handles CSS with comments" do
+      # Given: CSS with comments
+      css = """
+      /* Header styles */
+      .header {
+        color: blue; /* Main color */
+      }
+      """
+
+      # When: Validating CSS
+      {:ok, _, true} = Parser.validate_css(css)
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css = ""
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+
+    test "handles CSS with only whitespace" do
+      # Given: CSS with only whitespace
+      css = "   \n  \t  "
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+
+    test "rejects CSS with unbalanced braces" do
+      # Given: CSS with unbalanced braces
+      css = """
+      .header {
+        color: blue;
+      }
+      .content {
+        margin: 10px;
+      """
+
+      # When: Validating CSS
+      result = Parser.validate_css(css)
+
+      # Then: Should return error
+      assert {:error, _, "CSS syntax error: Unbalanced braces"} = result
+    end
+
+    test "rejects CSS with invalid syntax" do
+      # Given: CSS with invalid syntax
+      css = """
+      {}}
+      """
+
+      # When: Validating CSS
+      result = Parser.validate_css(css)
+
+      # Then: Should return error
+      assert {:error, _, _} = result
+    end
+
+    test "handles binary input" do
+      # Given: CSS as binary
+      css =
+        """
+        .header {
+          color: blue;
+        }
+        """
+        |> String.to_charlist()
+        |> :erlang.iolist_to_binary()
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+
+    test "handles CSS with special characters" do
+      # Given: CSS with special characters
+      css = """
+      .header[data-test="test-value"] {
+        content: "✓";
+      }
+      """
+
+      # When: Validating CSS
+      {:ok, _, true} = assert Parser.validate_css(css)
+    end
+  end
 end

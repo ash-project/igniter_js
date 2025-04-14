@@ -472,3 +472,60 @@ def extract_fonts(css: Union[str, bytes]) -> Dict[str, List[Dict[str, Any]]]:
                 fonts[selector].extend(font_decls)
 
     return fonts
+
+def extract_selectors_by_property(css: Union[str, bytes], property_name: str) -> Dict[str, str]:
+    """
+    Extract all selectors that use a specific CSS property and their values.
+
+    Args:
+        css: The CSS code as string or bytes
+        property_name: The name of the property to extract (case-insensitive)
+
+    Returns:
+        Dictionary mapping selectors to their property values
+
+    Raises:
+        Exception: If the CSS cannot be properly parsed
+    """
+    if isinstance(css, bytes):
+        css = css.decode('utf-8')
+
+    # Validate CSS syntax before proceeding
+    if css.count('{') != css.count('}'):
+        raise Exception("CSS syntax error: Unbalanced braces")
+
+    # Parse CSS for analysis
+    rules = parse_stylesheet(css)
+
+    # Check for parse errors
+    for rule in rules:
+        if hasattr(rule, 'type') and rule.type == 'error':
+            raise Exception(f"CSS parse error: {getattr(rule, 'message', 'Unknown error')}")
+
+    selectors = {}
+
+    # Recursive function to process rules
+    def process_rules(rule_list):
+        for rule in rule_list:
+            if rule.type == "qualified-rule":
+                selector = get_selector_text(rule)
+                declarations = get_rule_declarations(rule)
+                
+                for decl in declarations:
+                    if decl.type == "declaration" and decl.name.lower() == property_name.lower():
+                        value = tinycss2.serialize(decl.value).strip()
+                        if decl.important:
+                            value += " !important"
+                        selectors[selector] = value
+
+            # Process media queries and other at-rules with nested content
+            elif rule.type == "at-rule" and rule.content is not None:
+                # Parse nested rules
+                nested_rules = parse_stylesheet(tinycss2.serialize(rule.content))
+                # Recursively process nested rules
+                process_rules(nested_rules)
+
+    # Start processing rules
+    process_rules(rules)
+
+    return selectors

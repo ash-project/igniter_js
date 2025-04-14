@@ -72,9 +72,17 @@ def get_rule_declarations(rule: Any) -> List[Any]:
     """
     if not hasattr(rule, 'content'):
         return []
-    return tinycss2.parse_declaration_list(
-        rule.content, skip_whitespace=False, skip_comments=False
-    )
+    
+    # Ensure content is properly serialized before parsing
+    content = rule.content
+    if isinstance(content, str):
+        return tinycss2.parse_declaration_list(content, skip_whitespace=False, skip_comments=False)
+    else:
+        # Serialize the content if it's not a string
+        serialized_content = tinycss2.serialize(content)
+        # Remove any surrounding braces if present
+        serialized_content = serialized_content.strip('{}')
+        return tinycss2.parse_declaration_list(serialized_content, skip_whitespace=False, skip_comments=False)
 
 
 def get_selector_text(rule: Any) -> str:
