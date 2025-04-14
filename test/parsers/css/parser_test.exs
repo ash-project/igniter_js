@@ -657,4 +657,128 @@ defmodule IgniterJSTest.Parsers.Css.ParserTest do
       assert String.contains?(error_message, "Failed to parse CSS")
     end
   end
+
+  describe "minify/1" do
+    test "minifies CSS by removing whitespace and comments" do
+      # Given: CSS with whitespace and comments
+      css_code = """
+      /* Header styles */
+      .header {
+        color: blue;
+        font-size: 16px;
+      }
+
+      /* Content area */
+      .content {
+        padding: 20px;
+        margin: 10px;
+      }
+      """
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: Result should be minified without whitespace and comments
+      assert !String.contains?(result, "/* Header styles */")
+      assert !String.contains?(result, "\n")
+      assert String.contains?(result, ".header{color:blue;font-size:16px;}")
+      assert String.contains?(result, ".content{padding:20px;margin:10px;}")
+    end
+
+    test "preserves functionality while minifying" do
+      # Given: CSS with various properties
+      css_code = """
+      .button {
+        display: inline-block;
+        background-color: #007bff;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 4px;
+      }
+      """
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: All properties should be preserved in minified form
+      assert String.contains?(result, "display:inline-block")
+      assert String.contains?(result, "background-color:#007bff")
+      assert String.contains?(result, "color:white")
+      assert String.contains?(result, "padding:10px 15px")
+      assert String.contains?(result, "border-radius:4px")
+    end
+
+    test "handles CSS with media queries" do
+      # Given: CSS with media queries
+      css_code = """
+      @media (max-width: 768px) {
+        .mobile {
+          display: block;
+          width: 100%;
+        }
+      }
+      """
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: Media queries should be properly minified
+      assert String.contains?(
+               result,
+               "@media (max-width: 768px){.mobile{display:block;width:100%;}}"
+             )
+
+      assert String.contains?(result, ".mobile{display:block;width:100%;}")
+    end
+
+    test "handles CSS with vendor prefixes" do
+      # Given: CSS with vendor prefixes
+      css_code = """
+      .box {
+        -webkit-border-radius: 4px;
+        -moz-border-radius: 4px;
+        border-radius: 4px;
+      }
+      """
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: Vendor prefixes should be preserved
+      assert String.contains?(result, "-webkit-border-radius:4px")
+      assert String.contains?(result, "-moz-border-radius:4px")
+      assert String.contains?(result, "border-radius:4px")
+    end
+
+    test "handles @import and other at-rules" do
+      # Given: CSS with at-rules
+      css_code = """
+      @import url('fonts.css');
+      @charset "UTF-8";
+      @keyframes fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      """
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: At-rules should be properly minified
+      assert String.contains?(result, "@import url(\"fonts.css\")")
+      assert String.contains?(result, "@charset \"UTF-8\"")
+      assert String.contains?(result, "@keyframes fade{from{opacity:0;}to{opacity:1;}}")
+    end
+
+    test "handles empty CSS" do
+      # Given: Empty CSS
+      css_code = ""
+
+      # When: Minifying the CSS
+      {:ok, _, result} = Parser.minify(css_code)
+
+      # Then: Result should be empty
+      assert result == ""
+    end
+  end
 end
