@@ -105,15 +105,15 @@ defmodule IgniterJs.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:rustler, "~> 0.36.1", optional: true},
+      {:rustler, "~> 0.36.2", optional: true},
       {:jason, "~> 1.4"},
       {:rustler_precompiled, "~> 0.8"},
-      {:ex_doc, "~> 0.35", only: [:dev, :test], runtime: false},
-      {:ex_check, "~> 0.12", only: [:dev, :test]},
+      {:ex_doc, "~> 0.38", only: [:dev, :test], runtime: false},
+      {:ex_check, "~> 0.16", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:sobelow, ">= 0.0.0", only: [:dev, :test], runtime: false},
-      {:git_ops, "~> 2.5", only: [:dev, :test]},
+      {:git_ops, "~> 2.9", only: [:dev, :test]},
       {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]
   end
