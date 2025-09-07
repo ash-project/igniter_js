@@ -114,7 +114,7 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
             })
         })
         .collect();
-    let estree_json = program.to_pretty_estree_ts_json();
+    let estree_json = program.to_pretty_estree_ts_json(true);
 
     let full_json = json!({
         "program": serde_json::from_str::<serde_json::Value>(&estree_json).unwrap_or(json!({})),

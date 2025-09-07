@@ -9,7 +9,7 @@ use swc_common::{
     FileName, SourceMap,
 };
 
-use swc_ecma_parser::{lexer::Lexer, Capturing, Parser, StringInput, Syntax};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
 pub fn parse(
     file_content: &str,
@@ -19,7 +19,7 @@ pub fn parse(
 
     let fm = cm.new_source_file(
         FileName::Custom("virtual_file.js".into()).into(),
-        file_content.into(),
+        file_content.to_string(),
     );
 
     let comments = SingleThreadedComments::default();
@@ -31,9 +31,7 @@ pub fn parse(
         Some(&comments),
     );
 
-    let capturing = Capturing::new(lexer);
-
-    let mut parser = Parser::new_from(capturing);
+    let mut parser = Parser::new_from(lexer);
 
     for e in parser.take_errors() {
         e.into_diagnostic(&handler).emit();
