@@ -5,6 +5,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.4.7](https://github.com/ash-project/igniter_js/compare/v0.4.6...v0.4.7) (2025-09-07)
+
+
+
+
+### Bug Fixes:
+
+* rules: fix community rules causing validation issues by Shahryar Tavakkoli
+
 ## [v0.4.6](https://github.com/ash-project/igniter_js/compare/v0.4.5...v0.4.6) (2025-03-08)
 
 
