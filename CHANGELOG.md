@@ -5,6 +5,14 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.4.8](https://github.com/ash-project/igniter_js/compare/v0.4.7...v0.4.8) (2025-09-08)
+
+
+### Bug Fixes:
+
+* remove rust-toolchain.toml file
+
+
 ## [v0.4.7](https://github.com/ash-project/igniter_js/compare/v0.4.6...v0.4.7) (2025-09-07)
 
 

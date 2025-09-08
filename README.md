@@ -14,7 +14,7 @@ IgniterJs is javascript patching functionality for [Igniter](https://hexdocs.pm/
 IgniterJs can be added to an existing elixir project by adding it to your dependencies:
 
 ```elixir
-{:igniter_js, "~> 0.4.7", only: [:dev, :test]}
+{:igniter_js, "~> 0.4.8", only: [:dev, :test]}
 ```
 
 ## Status
