@@ -1,6 +1,6 @@
 defmodule IgniterJs.MixProject do
   use Mix.Project
-  @version "0.4.9"
+  @version "0.4.10"
   @source_url "https://github.com/ash-project/igniter_js"
 
   @description """

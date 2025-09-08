@@ -917,7 +917,7 @@ checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
 
 [[package]]
 name = "igniter_js"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "biome_console",
  "biome_css_factory",

@@ -1,6 +1,6 @@
 [package]
 name = "igniter_js"
-version = "0.4.9"
+version = "0.4.10"
 authors = ["Shahryar Tavakkoli"]
 edition = "2021"
 
