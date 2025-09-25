@@ -5,6 +5,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.4.11](https://github.com/ash-project/igniter_js/compare/v0.4.10...v0.4.11) (2025-09-25)
+
+
+
+
+### Bug Fixes:
+
+* parser: prevent duplicating hooks object when custom conditions exist (#42) by Shahryar Tavakkoli
+
+* parser: prevent duplicating hooks object when custom conditions exist by Shahryar Tavakkoli
+
 ## [v0.4.10](https://github.com/ash-project/igniter_js/compare/v0.4.9...v0.4.10) (2025-09-08)
 
 
