@@ -506,6 +506,106 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     {:error, _, _} = Parser.replace_at_index(js_code, "function replacedFunc() {}", 5)
   end
 
+  test "Extend existing Hooks new object as spread operator" do
+    js_code = """
+    let hooks = { ...colocatedHooks, KeepScrollPosition };
+    hooks.map = mapHook;
+    hooks.datalist = datalistHook;
+    hooks.WebsitePreview = WebsitePreview;
+    hooks.TreeSelect = TreeSelect;
+
+    window.phxHooks = hooks;
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      .getAttribute("content");
+    const liveSocket = new LiveSocket("/live", Socket, {
+      longPollFallbackMs: 2500,
+      params: { _csrf_token: csrfToken },
+      hooks: hooks,
+      sessionStorage:
+        process.env.NODE_ENV === "development",
+    });
+    """
+
+    objects_names = ["OXCTestHook", "MishkaHooks", "MishkaHooks", "OXCTestHook"]
+
+    final_version = """
+    let hooks = {
+        ...colocatedHooks,
+        KeepScrollPosition
+    };
+    hooks.map = mapHook;
+    hooks.datalist = datalistHook;
+    hooks.WebsitePreview = WebsitePreview;
+    hooks.TreeSelect = TreeSelect;
+    window.phxHooks = hooks;
+    const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
+    const liveSocket = new LiveSocket("/live", Socket, {
+        longPollFallbackMs: 2500,
+        params: {
+            _csrf_token: csrfToken
+        },
+        hooks: {
+            ...hooks,
+            MishkaHooks,
+            OXCTestHook
+        },
+        sessionStorage: process.env.NODE_ENV === "development"
+    });
+    """
+
+    ^final_version = assert Parser.extend_hook_object(js_code, objects_names) |> elem(2)
+
+    js_code = """
+    let nameHooks = { ...colocatedHooks, KeepScrollPosition };
+    nameHooks.map = mapHook;
+    nameHooks.datalist = datalistHook;
+    nameHooks.WebsitePreview = WebsitePreview;
+    nameHooks.TreeSelect = TreeSelect;
+
+    window.phxHooks = nameHooks;
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      .getAttribute("content");
+    const liveSocket = new LiveSocket("/live", Socket, {
+      longPollFallbackMs: 2500,
+      params: { _csrf_token: csrfToken },
+      hooks: nameHooks,
+      sessionStorage:
+        process.env.NODE_ENV === "development",
+    });
+    """
+
+    final_version = """
+    let nameHooks = {
+        ...colocatedHooks,
+        KeepScrollPosition
+    };
+    nameHooks.map = mapHook;
+    nameHooks.datalist = datalistHook;
+    nameHooks.WebsitePreview = WebsitePreview;
+    nameHooks.TreeSelect = TreeSelect;
+    window.phxHooks = nameHooks;
+    const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
+    const liveSocket = new LiveSocket("/live", Socket, {
+        longPollFallbackMs: 2500,
+        params: {
+            _csrf_token: csrfToken
+        },
+        hooks: {
+            ...nameHooks,
+            MishkaHooks,
+            OXCTestHook
+        },
+        sessionStorage: process.env.NODE_ENV === "development"
+    });
+    """
+
+    ^final_version = assert Parser.extend_hook_object(js_code, objects_names) |> elem(2)
+  end
+
   defp string_counter(string, pattern) do
     Regex.scan(Regex.compile!(pattern), string)
     |> length()

@@ -31,50 +31,88 @@ impl<'a> HookExtender<'a> {
     }
 
     fn extend_or_create_hooks(&mut self, obj_expr: &mut ObjectLit) {
-        if let Some(hooks_property) = obj_expr.props.iter_mut().find_map(|prop| {
+        // Find the hooks property
+        let hooks_prop_index = obj_expr.props.iter().position(|prop| {
             if let PropOrSpread::Prop(prop) = prop {
                 if let Prop::KeyValue(KeyValueProp {
                     key: PropName::Ident(ident),
-                    value,
-                }) = &mut **prop
+                    ..
+                }) = &**prop
                 {
-                    if ident.sym == *"hooks" {
-                        if let Expr::Object(obj_expr) = &mut **value {
-                            return Some(obj_expr);
-                        }
-                    }
+                    return ident.sym == *"hooks";
                 }
             }
-            None
-        }) {
-            // Extend existing hooks
-            for new_object in &self.new_objects {
-                let already_exists = hooks_property.props.iter().any(|prop| match prop {
-                    PropOrSpread::Prop(prop) => {
-                        if let Prop::Shorthand(ident) = &**prop {
-                            ident.sym == *new_object
-                        } else {
-                            false
-                        }
-                    }
-                    PropOrSpread::Spread(spread) => {
-                        if let Expr::Ident(ident) = &*spread.expr {
-                            let spread_sym = format!("...{}", ident.sym);
-                            spread_sym == *new_object
-                        } else {
-                            false
-                        }
-                    }
-                });
+            false
+        });
 
-                if !already_exists {
-                    hooks_property
-                        .props
-                        .push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident::new(
-                            (*new_object).into(),
-                            DUMMY_SP,
-                            SyntaxContext::empty(),
-                        )))));
+        if let Some(index) = hooks_prop_index {
+            // Get the hooks property
+            if let PropOrSpread::Prop(prop) = &mut obj_expr.props[index] {
+                if let Prop::KeyValue(KeyValueProp { value, .. }) = &mut **prop {
+                    match &mut **value {
+                        // Case 1: hooks is an inline object literal
+                        Expr::Object(hooks_obj) => {
+                            // Extend existing inline object
+                            for new_object in &self.new_objects {
+                                let already_exists =
+                                    hooks_obj.props.iter().any(|prop| match prop {
+                                        PropOrSpread::Prop(prop) => {
+                                            if let Prop::Shorthand(ident) = &**prop {
+                                                ident.sym == *new_object
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                        PropOrSpread::Spread(spread) => {
+                                            if let Expr::Ident(ident) = &*spread.expr {
+                                                let spread_sym = format!("...{}", ident.sym);
+                                                spread_sym == *new_object
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                    });
+
+                                if !already_exists {
+                                    hooks_obj.props.push(PropOrSpread::Prop(Box::new(
+                                        Prop::Shorthand(Ident::new(
+                                            (*new_object).into(),
+                                            DUMMY_SP,
+                                            SyntaxContext::empty(),
+                                        )),
+                                    )));
+                                }
+                            }
+                        }
+                        // Case 2: hooks is an identifier reference (e.g., hooks: hooks)
+                        Expr::Ident(ident) => {
+                            // Create a new object with spread of the original identifier
+                            let mut new_props = vec![PropOrSpread::Spread(SpreadElement {
+                                dot3_token: DUMMY_SP,
+                                expr: Box::new(Expr::Ident(ident.clone())),
+                            })];
+
+                            // Add the new objects
+                            for new_object in &self.new_objects {
+                                new_props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(
+                                    Ident::new(
+                                        (*new_object).into(),
+                                        DUMMY_SP,
+                                        SyntaxContext::empty(),
+                                    ),
+                                ))));
+                            }
+
+                            // Replace the value with the new object
+                            **value = Expr::Object(ObjectLit {
+                                span: DUMMY_SP,
+                                props: new_props,
+                            });
+                        }
+                        _ => {
+                            // Other expressions - we don't handle these
+                        }
+                    }
                 }
             }
         } else {
@@ -396,6 +434,45 @@ mod tests {
 
         let result = find_live_socket_node_from_ast(code);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extend_hook_object_with_identifier_reference() {
+        // Test case where hooks is referenced as an identifier rather than inline object
+        let code = r#"
+        let hooks = { ...colocatedHooks, KeepScrollPosition };
+        hooks.map = mapHook;
+        hooks.datalist = datalistHook;
+        hooks.WebsitePreview = WebsitePreview;
+        hooks.TreeSelect = TreeSelect;
+
+        window.phxHooks = hooks;
+
+        const csrfToken = document
+          .querySelector("meta[name='csrf-token']")
+          .getAttribute("content");
+        const liveSocket = new LiveSocket("/live", Socket, {
+          longPollFallbackMs: 2500,
+          params: { _csrf_token: csrfToken },
+          hooks: hooks,
+          sessionStorage: process.env.NODE_ENV === "development",
+        });
+        "#;
+
+        let new_objects = vec!["MishkaHooks", "OXCTestHook"];
+        let result = extend_hook_object_to_ast(code, new_objects);
+        assert!(result.is_ok());
+
+        let updated_code = result.unwrap();
+        println!("Updated code:\n{}", updated_code);
+
+        // The result should have hooks: {...hooks, MishkaHooks, OXCTestHook} instead of duplicate hooks property
+        assert!(updated_code.contains("hooks: {"));
+        assert!(updated_code.contains("...hooks"));
+        assert!(updated_code.contains("MishkaHooks"));
+        assert!(updated_code.contains("OXCTestHook"));
+        // Should not have duplicate hooks property
+        assert_eq!(updated_code.matches("hooks:").count(), 1);
     }
 
     #[test]
