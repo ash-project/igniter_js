@@ -476,6 +476,110 @@ mod tests {
     }
 
     #[test]
+    fn test_extend_hooks_with_key_value_properties() {
+        // Test extending hooks that has key-value properties (not just shorthand)
+        let code = r#"
+        const liveSocket = new LiveSocket("/live", Socket, {
+          hooks: {
+            "StringKey": MyHook,
+            normalKey: AnotherHook,
+            123: NumericHook
+          },
+          params: { _csrf_token: csrfToken }
+        });
+        "#;
+
+        let new_objects = vec!["NewHook"];
+        let result = extend_hook_object_to_ast(code, new_objects);
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert!(updated.contains("NewHook"));
+    }
+
+    #[test]
+    fn test_extend_hooks_with_const_let_var_declarations() {
+        // Test with different variable declaration types
+        let test_cases = vec![
+            ("const", r#"const liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
+            ("let", r#"let liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
+            ("var", r#"var liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
+        ];
+
+        for (decl_type, code) in test_cases {
+            let result = extend_hook_object_to_ast(code, vec!["TestHook"]);
+            assert!(result.is_ok(), "Failed for {} declaration", decl_type);
+            assert!(result.unwrap().contains("TestHook"));
+        }
+    }
+
+    #[test]
+    fn test_extend_hooks_preserves_other_properties() {
+        // Ensure other LiveSocket properties remain untouched
+        let code = r#"
+        const liveSocket = new LiveSocket("/live", Socket, {
+          longPollFallbackMs: 2500,
+          params: { _csrf_token: csrfToken },
+          hooks: { ExistingHook },
+          dom: { onBeforeElUpdated: () => {} },
+          metadata: { key: "value" }
+        });
+        "#;
+
+        let result = extend_hook_object_to_ast(code, vec!["NewHook"]).unwrap();
+
+        // Verify all properties are preserved
+        assert!(result.contains("longPollFallbackMs: 2500"));
+        assert!(result.contains("_csrf_token: csrfToken"));
+        assert!(result.contains("ExistingHook"));
+        assert!(result.contains("NewHook"));
+        assert!(result.contains("onBeforeElUpdated"));
+        assert!(result.contains("metadata"));
+    }
+
+    #[test]
+    fn test_extend_empty_hooks_object() {
+        // Test extending an empty hooks object
+        let code = r#"
+        let liveSocket = new LiveSocket("/live", Socket, {
+          hooks: {},
+          params: { _csrf_token: csrfToken }
+        });
+        "#;
+
+        let result = extend_hook_object_to_ast(code, vec!["FirstHook", "SecondHook"]);
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert!(updated.contains("FirstHook"));
+        assert!(updated.contains("SecondHook"));
+    }
+
+    #[test]
+    fn test_extend_hooks_with_mixed_spread_and_properties() {
+        // Test complex hooks object with multiple spreads and properties
+        let code = r#"
+        const liveSocket = new LiveSocket("/live", Socket, {
+          hooks: {
+            ...BaseHooks,
+            CustomHook,
+            ...MoreHooks,
+            FinalHook
+          }
+        });
+        "#;
+
+        let result = extend_hook_object_to_ast(code, vec!["NewHook"]);
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+
+        // Verify original structure is maintained
+        assert!(updated.contains("...BaseHooks"));
+        assert!(updated.contains("CustomHook"));
+        assert!(updated.contains("...MoreHooks"));
+        assert!(updated.contains("FinalHook"));
+        assert!(updated.contains("NewHook"));
+    }
+
+    #[test]
     fn test_remove_objects_of_hooks_from_ast() {
         let code = r#"
         let liveSocket = new LiveSocket("/live", Socket, {

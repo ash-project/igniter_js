@@ -606,6 +606,151 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     ^final_version = assert Parser.extend_hook_object(js_code, objects_names) |> elem(2)
   end
 
+  test "Extend hooks with different variable declarations (const, let, var)" do
+    # Test with const declaration
+    const_code = """
+    const liveSocket = new LiveSocket("/live", Socket, {
+      hooks: { ExistingHook },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} = Parser.extend_hook_object(const_code, ["NewHook"])
+
+    assert output =~ "const liveSocket"
+    assert output =~ "NewHook"
+    assert output =~ "ExistingHook"
+
+    # Test with let declaration
+    let_code = """
+    let liveSocket = new LiveSocket("/live", Socket, {
+      hooks: { ExistingHook },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} = Parser.extend_hook_object(let_code, ["NewHook"])
+    assert output =~ "let liveSocket"
+    assert output =~ "NewHook"
+
+    # Test with var declaration
+    var_code = """
+    var liveSocket = new LiveSocket("/live", Socket, {
+      hooks: { ExistingHook },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} = Parser.extend_hook_object(var_code, ["NewHook"])
+    assert output =~ "var liveSocket"
+    assert output =~ "NewHook"
+  end
+
+  test "Extend hooks preserves other LiveSocket properties" do
+    js_code = """
+    const liveSocket = new LiveSocket("/live", Socket, {
+      longPollFallbackMs: 2500,
+      params: { _csrf_token: csrfToken },
+      hooks: { ExistingHook },
+      dom: { onBeforeElUpdated: () => {} },
+      metadata: { key: "value" },
+      sessionStorage: true
+    });
+    """
+
+    {:ok, :extend_hook_object, output} = Parser.extend_hook_object(js_code, ["NewHook"])
+
+    # Verify all properties are preserved
+    assert output =~ "longPollFallbackMs: 2500"
+    assert output =~ "_csrf_token: csrfToken"
+    assert output =~ "ExistingHook"
+    assert output =~ "NewHook"
+    assert output =~ "onBeforeElUpdated"
+    assert output =~ "metadata"
+    assert output =~ "sessionStorage: true"
+  end
+
+  test "Extend empty hooks object" do
+    js_code = """
+    let liveSocket = new LiveSocket("/live", Socket, {
+      hooks: {},
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} =
+      Parser.extend_hook_object(js_code, ["FirstHook", "SecondHook"])
+
+    assert output =~ "FirstHook"
+    assert output =~ "SecondHook"
+    assert output =~ "hooks: {"
+  end
+
+  test "Extend hooks with mixed spread operators and properties" do
+    js_code = """
+    const liveSocket = new LiveSocket("/live", Socket, {
+      hooks: {
+        ...BaseHooks,
+        CustomHook,
+        ...MoreHooks,
+        FinalHook
+      },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} =
+      Parser.extend_hook_object(js_code, ["NewHook", "AnotherNewHook"])
+
+    # Verify original structure is maintained
+    assert output =~ "...BaseHooks"
+    assert output =~ "CustomHook"
+    assert output =~ "...MoreHooks"
+    assert output =~ "FinalHook"
+    assert output =~ "NewHook"
+    assert output =~ "AnotherNewHook"
+  end
+
+  test "Extend hooks with key-value properties" do
+    js_code = """
+    const liveSocket = new LiveSocket("/live", Socket, {
+      hooks: {
+        "StringKey": MyHook,
+        normalKey: AnotherHook,
+        123: NumericHook
+      },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    {:ok, :extend_hook_object, output} = Parser.extend_hook_object(js_code, ["NewHook"])
+    assert output =~ "NewHook"
+    # The formatter might change the exact format but the hooks should be there
+    assert output =~ "MyHook"
+    assert output =~ "AnotherHook"
+    assert output =~ "NumericHook"
+  end
+
+  test "Extend hooks handles duplicate entries correctly" do
+    js_code = """
+    const liveSocket = new LiveSocket("/live", Socket, {
+      hooks: {
+        ExistingHook,
+        AnotherHook
+      },
+      params: { _csrf_token: csrfToken }
+    });
+    """
+
+    # Try to add duplicates
+    {:ok, :extend_hook_object, output} =
+      Parser.extend_hook_object(js_code, ["ExistingHook", "NewHook", "ExistingHook", "NewHook"])
+
+    # Should only have one instance of each hook
+    assert length(Regex.scan(~r/\bExistingHook\b/, output)) == 1
+    assert length(Regex.scan(~r/\bNewHook\b/, output)) == 1
+  end
+
   defp string_counter(string, pattern) do
     Regex.scan(Regex.compile!(pattern), string)
     |> length()
