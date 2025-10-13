@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJSTest.Parsers.Javascript.FormatterTest do
   use ExUnit.Case
   alias IgniterJs.Parsers.Javascript.Formatter

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.MixProject do
   use Mix.Project
   @version "0.4.11"
@@ -27,7 +31,6 @@ defmodule IgniterJs.MixProject do
 
   defp package() do
     [
-      name: :igniter_js,
       files: ~w[
           lib
           native/igniter_js/src
@@ -37,17 +40,20 @@ defmodule IgniterJs.MixProject do
           checksum-*.exs
           .formatter.exs
           mix.exs
-          LICENSE
           README*
         ],
-      maintainers: ["Zach Daniel", "Shahryar Tavakkoli"],
+      maintainers: [
+        "Zach Daniel <zach@zachdaniel.dev>",
+        "Shahryar Tavakkoli <shahryar.tbiz@gmail.com>"
+      ],
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
         "Discord" => "https://discord.gg/HTHRaaVPUc",
         "Website" => "https://ash-hq.org",
         "Forum" => "https://elixirforum.com/c/ash-framework-forum/",
-        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+        "REUSE Compliance" => "https://api.reuse.software/info/github.com/ash-project/igniter_js"
       }
     ]
   end

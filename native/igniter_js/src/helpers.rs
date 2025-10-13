@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 //! Helper functions for encoding and formatting responses.
 //!
 //! This module provides utility functions for encoding consistent responses

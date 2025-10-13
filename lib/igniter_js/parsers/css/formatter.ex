@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Parsers.CSS.Formatter do
   @moduledoc """
   This module provides functions to check if a CSS file is formatted

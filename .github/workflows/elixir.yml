@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 name: CI
 on:
   push:
@@ -16,5 +20,6 @@ jobs:
       sobelow: false
       igniter-upgrade: false
       rustler-precompiled-module: IgniterJs.Native
+      reuse: true
     secrets:
       HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

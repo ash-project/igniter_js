@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Helpers do
   @moduledoc """
   A module that contains helper functions for IgniterJs. For example it helps to normalize the

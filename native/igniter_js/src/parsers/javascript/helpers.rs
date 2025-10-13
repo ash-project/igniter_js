@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 use swc_ecma_ast::{ImportSpecifier, Module, ModuleDecl, ModuleItem};
 use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
 use swc_ecma_visit::{VisitMut, VisitMutWith};

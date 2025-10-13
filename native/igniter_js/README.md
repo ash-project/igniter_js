@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+
+SPDX-License-Identifier: MIT
+-->
+
 # NIF for Elixir.IgniterJs.Native
 
 ## To build the NIF module:

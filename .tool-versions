@@ -1,2 +1,4 @@
 erlang 28.0.2
 elixir 1.18.4-otp-28
+rust 1.89.0
+pipx 1.8.0
