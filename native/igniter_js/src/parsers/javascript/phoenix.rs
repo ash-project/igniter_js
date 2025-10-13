@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 //! # Phoenix Hook Helpers
 //!
 //! This module provides helper functions and utilities for working with Phoenix LiveView hooks

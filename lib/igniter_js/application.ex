@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications

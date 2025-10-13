@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 use oxc_allocator::Allocator;
 use oxc_ast_visit::utf8_to_utf16::Utf8ToUtf16;
 use oxc_diagnostics::Severity;

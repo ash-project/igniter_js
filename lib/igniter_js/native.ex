@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Native do
   @moduledoc false
   # use Rustler, otp_app: :igniter_js, crate: "igniter_js"

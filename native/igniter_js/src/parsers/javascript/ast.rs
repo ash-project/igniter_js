@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 //! Utility functions for manipulating JavaScript Abstract Syntax Trees (ASTs).
 //!
 //! This module provides various tools for working with JavaScript ASTs, including:

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 # mix git_ops.release
 #
 # To build locally, use the following command:

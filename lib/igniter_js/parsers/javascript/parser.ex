@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Parsers.Javascript.Parser do
   @moduledoc """
   Codemods for JavaScript files.

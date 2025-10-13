@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 use std::collections::HashSet;
 
 use crate::atoms;

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 import Config
 
 if Mix.env() == :dev do

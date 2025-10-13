@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 use biome_formatter::{IndentStyle, IndentWidth};
 use biome_js_formatter::context::JsFormatOptions;
 use biome_js_formatter::format_node;

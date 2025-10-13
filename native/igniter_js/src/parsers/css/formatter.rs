@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+//
+// SPDX-License-Identifier: MIT
+
 use biome_css_formatter::{context::CssFormatOptions, format_node};
 use biome_css_parser::{parse_css, CssParserOptions};
 use biome_css_syntax::CssFileSource;

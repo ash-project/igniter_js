@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 defmodule IgniterJs.Parsers.Javascript.Formatter do
   @moduledoc """
   This module provides functions to check if a JavaScript file is formatted

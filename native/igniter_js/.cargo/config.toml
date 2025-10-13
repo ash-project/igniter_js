@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 [target.'cfg(target_os = "macos")']
 rustflags = [
     "-C", "link-arg=-undefined",

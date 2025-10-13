@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 Shahryar Tavakkoli
+#
+# SPDX-License-Identifier: MIT
+
 # The directory Mix will write compiled artifacts to.
 /_build/
 
@@ -34,3 +38,4 @@ igniter_js-*.tar
 # ignore local builds
 checksum-Elixir.*.exs
 *.so
+.env*
