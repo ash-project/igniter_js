@@ -191,7 +191,6 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
 
     let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
 
-    // An unparseable `module_name` cannot be imported by definition.
     if import_visitor.parse_error.is_some() {
         return Err(false);
     }
@@ -530,7 +529,6 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
 /// assert_eq!(result, Err(false));
 /// ```
 pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Result<bool, bool> {
-    // `Err(false)` covers both "not found" and "source did not parse".
     let (module, _, _) = match parse(file_content) {
         Ok(result) => result,
         Err(_) => return Err(false),

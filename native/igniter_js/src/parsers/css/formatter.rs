@@ -78,9 +78,46 @@ h1 {
   font-size: 20px;
 }
 "#;
-        assert_eq!(is_formatted(css_unformatted).unwrap(), false);
+        assert!(!is_formatted(css_unformatted).unwrap());
 
         let formatted = format(css_formatted).unwrap();
-        assert_eq!(is_formatted(&formatted).unwrap(), true);
+        assert!(is_formatted(&formatted).unwrap());
+    }
+
+    #[test]
+    fn test_format_rejects_syntax_errors() {
+        assert!(format("body { color").is_err());
+        assert!(format("@@@").is_err());
+    }
+
+    #[test]
+    fn test_is_formatted_propagates_syntax_errors() {
+        assert!(is_formatted("body { color").is_err());
+    }
+
+    #[test]
+    fn test_format_is_idempotent() {
+        let once = format("body{color:red;}").unwrap();
+        let twice = format(&once).unwrap();
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn test_format_uses_two_space_indent() {
+        assert_eq!(
+            format("body{color:red;}").unwrap(),
+            "body {\n  color: red;\n}\n"
+        );
+    }
+
+    #[test]
+    fn test_format_preserves_comments() {
+        let output = format("/* keep me */\nbody{color:red;}").unwrap();
+        assert!(output.contains("/* keep me */"), "got: {output}");
+    }
+
+    #[test]
+    fn test_format_empty_input() {
+        assert_eq!(format("").unwrap(), "");
     }
 }

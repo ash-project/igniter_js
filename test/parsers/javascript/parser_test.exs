@@ -762,8 +762,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     let Hooks = {};
     """
 
-    # The second argument is parsed as JavaScript, so a bare filesystem path
-    # is a syntax error.
     assert {:error, :remove_imports, _reason} =
              Parser.remove_imports(js_code, "../vendor/topbar", :content)
 
@@ -775,7 +773,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     refute Parser.module_imported?(js_code, "../vendor/topbar", :content)
 
-    # The supported spellings still work.
     assert {:ok, :remove_imports, output} =
              Parser.remove_imports(js_code, ~s|import topbar from "../vendor/topbar";|, :content)
 

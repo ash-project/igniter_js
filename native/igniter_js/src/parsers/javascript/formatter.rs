@@ -168,9 +168,38 @@ mod tests {
         let js_code_formatted = r#"function test() {
           console.log("hello world");
         }"#;
-        assert_eq!(is_formatted(js_code_unformatted).unwrap(), false);
+        assert!(!is_formatted(js_code_unformatted).unwrap());
 
         let formatted = format(js_code_formatted).unwrap();
-        assert_eq!(is_formatted(&formatted).unwrap(), true);
+        assert!(is_formatted(&formatted).unwrap());
+    }
+
+    #[test]
+    fn test_format_rejects_syntax_errors() {
+        assert!(format("function {{{").is_err());
+        assert!(format("const a = ;").is_err());
+    }
+
+    #[test]
+    fn test_is_formatted_propagates_syntax_errors() {
+        assert!(is_formatted("function {{{").is_err());
+    }
+
+    #[test]
+    fn test_format_is_idempotent() {
+        let once = format("const   a=1;const b   =2;").unwrap();
+        let twice = format(&once).unwrap();
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn test_format_uses_two_space_indent() {
+        let output = format("function a(){return 1;}").unwrap();
+        assert!(output.contains("\n  return 1;"), "got: {output}");
+    }
+
+    #[test]
+    fn test_format_empty_input() {
+        assert_eq!(format("").unwrap(), "");
     }
 }

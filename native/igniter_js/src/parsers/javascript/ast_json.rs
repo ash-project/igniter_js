@@ -29,9 +29,12 @@ use serde_json::json;
 ///
 /// # Output Structure
 /// The returned JSON contains:
-/// * `"program"` - The parsed AST in ESTree format.
-/// * `"comments"` - Extracted comments from the source code.
-/// * `"errors"` - A list of syntax errors with details.
+/// * `"program"` - The parsed AST in ESTree format. Every node carries `range`
+///   (`[start, end]`) alongside `start`/`end`, and TypeScript fields are included.
+/// * `"comments"` - Extracted comments from the source code, each tagged `"Line"`
+///   or `"Block"`. Offsets are UTF-16, not UTF-8 bytes.
+/// * `"errors"` - A list of syntax errors with details. A diagnostic with no
+///   labels serializes `"labels"` as `null` rather than `[]`.
 ///
 /// # Example
 /// ```rust
@@ -66,7 +69,6 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
 
             let help = e.help.as_ref().map(|h| h.to_string());
 
-            // Label-less diagnostics serialize as `null`, not `[]`.
             let labels = if e.labels.is_empty() {
                 None
             } else {
@@ -124,8 +126,6 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
             })
         })
         .collect();
-    // Arguments are (include_ts_fields, ranges); `ranges` adds `range: [start, end]`
-    // to every node alongside `start`/`end`.
     let estree_json = program.to_pretty_estree_json(true, true);
 
     let full_json = json!({
@@ -160,5 +160,106 @@ mod tests {
         let json_output = result.unwrap();
         println!("{}", json_output);
         assert!(is_valid_json(&json_output));
+    }
+
+    fn parse_to_value(code: &str) -> Value {
+        serde_json::from_str(&convert_ast_to_estree(code).expect("conversion must succeed"))
+            .expect("output must be valid JSON")
+    }
+
+    #[test]
+    fn test_top_level_shape() {
+        let value = parse_to_value("const a = 1;");
+
+        assert!(value.get("program").is_some());
+        assert!(value.get("comments").is_some());
+        assert!(value.get("errors").is_some());
+        assert_eq!(value["program"]["type"], "Program");
+    }
+
+    #[test]
+    fn test_valid_source_has_no_errors() {
+        let value = parse_to_value("const a = 1;");
+        assert_eq!(value["errors"].as_array().unwrap().len(), 0);
+    }
+
+    /// Syntax errors are reported in the `errors` array rather than failing the
+    /// whole conversion.
+    #[test]
+    fn test_syntax_errors_are_reported_not_raised() {
+        let value = parse_to_value("const a = ;");
+        let errors = value["errors"].as_array().unwrap();
+
+        assert!(!errors.is_empty());
+        assert_eq!(errors[0]["severity"], "Error");
+        assert!(errors[0]["message"].is_string());
+    }
+
+    /// Diagnostics without labels serialize as `null`, not `[]`.
+    #[test]
+    fn test_label_less_diagnostics_serialize_as_null() {
+        let value = parse_to_value("const a = ;");
+
+        for error in value["errors"].as_array().unwrap() {
+            let labels = &error["labels"];
+            assert!(
+                labels.is_null() || labels.is_array(),
+                "labels must be null or an array, got {labels}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_comments_are_captured_with_kind_and_span() {
+        let value = parse_to_value("const a = 1; /* block */ // line");
+        let comments = value["comments"].as_array().unwrap();
+
+        let kinds: Vec<_> = comments
+            .iter()
+            .map(|c| c["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, vec!["Block", "Line"]);
+
+        for comment in comments {
+            assert!(comment["start"].as_u64() < comment["end"].as_u64());
+            assert!(comment["value"].is_string());
+        }
+    }
+
+    /// `ranges` is enabled, so every node carries `range` next to `start`/`end`.
+    #[test]
+    fn test_nodes_carry_range() {
+        let value = parse_to_value("const a = 1;");
+        let program = &value["program"];
+
+        let range = program["range"]
+            .as_array()
+            .expect("program must have a range");
+        assert_eq!(range[0], program["start"]);
+        assert_eq!(range[1], program["end"]);
+
+        let node = &program["body"][0];
+        assert_eq!(node["type"], "VariableDeclaration");
+        assert!(node["range"].is_array());
+    }
+
+    #[test]
+    fn test_empty_source_still_produces_a_program() {
+        let value = parse_to_value("");
+
+        assert_eq!(value["program"]["type"], "Program");
+        assert_eq!(value["program"]["body"].as_array().unwrap().len(), 0);
+        assert_eq!(value["errors"].as_array().unwrap().len(), 0);
+    }
+
+    /// Multi-byte characters shift UTF-8 offsets, which are converted to the
+    /// UTF-16 offsets ESTree consumers expect.
+    #[test]
+    fn test_spans_are_converted_to_utf16_offsets() {
+        let value = parse_to_value("const emoji = \"😀\"; // tail");
+        let comments = value["comments"].as_array().unwrap();
+
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0]["start"].as_u64().unwrap(), 20);
     }
 }
