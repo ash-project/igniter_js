@@ -1013,8 +1013,7 @@ mod tests {
         println!("{:#?}", result.unwrap())
     }
 
-    #[cfg(test)]
-    mod tests {
+    mod index_operations {
         use super::*;
 
         #[test]
