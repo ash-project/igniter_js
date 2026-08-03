@@ -64,6 +64,10 @@ struct ASTVisitImport<'a> {
     duplicate_imports: Vec<String>,
     none_duplicate_imports: Vec<String>,
     operation: Operation,
+    /// Set when `code` cannot be parsed as JavaScript. `VisitMut` methods
+    /// return `()`, so callers must check this once the visit completes and
+    /// surface it as an error.
+    parse_error: Option<String>,
 }
 
 impl Default for ASTVisitImport<'_> {
@@ -73,24 +77,63 @@ impl Default for ASTVisitImport<'_> {
             duplicate_imports: Vec::new(),
             none_duplicate_imports: Vec::new(),
             operation: Operation::Edit,
+            parse_error: None,
         }
     }
 }
 
+/// Returned when the module/import argument is not valid JavaScript. The
+/// argument is parsed as source, so a bare filesystem path such as
+/// `../vendor/topbar` is a syntax error.
+const INVALID_ARGUMENT_MESSAGE: &str =
+    "The given module or import argument could not be interpreted. Provide a full import \
+     statement (`import topbar from \"../vendor/topbar\";`), or, when removing imports, \
+     a bare module specifier (`../vendor/topbar`).";
+
+/// Collects the module sources a removal request refers to.
+///
+/// The argument is first parsed as JavaScript. If it contains import
+/// declarations, only the sources those import from are used, which keeps
+/// multi-line import statements intact. Only when the argument holds no import
+/// declaration at all is each non-empty line taken literally as a module
+/// specifier, which is what lets a bare `topbar` or a path such as
+/// `../vendor/topbar` work even though neither is a valid import statement.
+fn removal_targets(code: &str) -> Vec<String> {
+    if let Ok((parsed, _comments, _cm)) = parse(code) {
+        let sources: Vec<String> = parsed
+            .body
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::ModuleDecl(ModuleDecl::Import(decl)) => {
+                    Some(decl.src.value.to_string_lossy().to_string())
+                }
+                _ => None,
+            })
+            .collect();
+
+        if !sources.is_empty() {
+            return sources;
+        }
+    }
+
+    code.lines()
+        .map(|line| line.trim().trim_end_matches(';').trim())
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 impl VisitMut for ASTVisitImport<'_> {
     fn visit_mut_module_items(&mut self, items: &mut Vec<ModuleItem>) {
-        // We are using it to delete imports
-        let (imports, _comments, _cm) = parse(self.code).expect("Failed to parse imports");
-
         if matches!(self.operation, Operation::Delete) {
+            let targets = removal_targets(self.code);
             let mut indices_to_remove = vec![];
 
             for (index, item) in items.iter().enumerate() {
                 if let ModuleItem::ModuleDecl(ModuleDecl::Import(existing_import)) = item {
-                    if imports.body.iter().any(|import| {
-                        matches!(import, ModuleItem::ModuleDecl(ModuleDecl::Import(new_import))
-                            if new_import.src.value == existing_import.src.value)
-                    }) {
+                    let source = existing_import.src.value.to_string_lossy().to_string();
+
+                    if targets.contains(&source) {
                         indices_to_remove.push(index);
                     }
                 }
@@ -105,8 +148,19 @@ impl VisitMut for ASTVisitImport<'_> {
     }
 
     fn visit_mut_module(&mut self, module: &mut Module) {
+        if !matches!(self.operation, Operation::Add | Operation::Read) {
+            module.visit_mut_children_with(self);
+            return;
+        }
+
         // We are using it to add imports and know it is duplicated or not
-        let (imports, _comments, _cm) = parse(self.code).expect("Failed to parse imports");
+        let imports = match parse(self.code) {
+            Ok((imports, _comments, _cm)) => imports,
+            Err(_) => {
+                self.parse_error = Some(INVALID_ARGUMENT_MESSAGE.to_string());
+                return;
+            }
+        };
 
         for import in imports.body {
             if !is_duplicate_import(&import, &module.body) {
@@ -120,7 +174,7 @@ impl VisitMut for ASTVisitImport<'_> {
 
                     for imp in import.as_module_decl().iter() {
                         if let ModuleDecl::Import(import_decl) = imp {
-                            let src_value = import_decl.src.value.to_string();
+                            let src_value = import_decl.src.value.to_string_lossy().to_string();
                             if !self.none_duplicate_imports.contains(&src_value) {
                                 self.none_duplicate_imports.push(src_value);
                             }
@@ -136,7 +190,7 @@ impl VisitMut for ASTVisitImport<'_> {
             } else if matches!(self.operation, Operation::Read) {
                 if let ModuleItem::ModuleDecl(ModuleDecl::Import(new_import_decl)) = import {
                     self.duplicate_imports
-                        .push(new_import_decl.src.value.to_string());
+                        .push(new_import_decl.src.value.to_string_lossy().to_string());
                 }
             }
         }
@@ -165,6 +219,10 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
     };
 
     let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
+
+    if import_visitor.parse_error.is_some() {
+        return Err(false);
+    }
 
     if import_visitor.none_duplicate_imports.is_empty()
         && import_visitor.duplicate_imports.is_empty()
@@ -201,7 +259,12 @@ pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<St
         ..Default::default()
     };
 
-    code_gen_from_ast_vist(file_content, &mut import_visitor)
+    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+
+    match import_visitor.parse_error {
+        Some(error) => Err(error),
+        None => Ok(output),
+    }
 }
 
 /// Removes specified import statements from JavaScript source code.
@@ -212,7 +275,11 @@ pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<St
 ///
 /// # Arguments
 /// - `file_content`: The JavaScript source code as a string slice.
-/// - `modules`: An iterable collection of module names (as strings) to be removed.
+/// - `modules`: The modules to remove, one per line. Each line may be either a
+///   full import statement (`import topbar from "../vendor/topbar";`) or a bare
+///   module specifier (`../vendor/topbar`). Matching is done on the module
+///   source, not on the local binding name, so removing `topbar` will not drop
+///   `import topbar from "../vendor/topbar"`.
 ///
 /// # Returns
 /// A `Result` containing the updated JavaScript code as a `String` on success,
@@ -228,7 +295,12 @@ pub fn remove_import_from_ast(file_content: &str, modules: &str) -> Result<Strin
         ..Default::default()
     };
 
-    code_gen_from_ast_vist(file_content, &mut import_visitor)
+    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+
+    match import_visitor.parse_error {
+        Some(error) => Err(error),
+        None => Ok(output),
+    }
 }
 
 // ###################################################################################
@@ -490,7 +562,10 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
 /// assert_eq!(result, Err(false));
 /// ```
 pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Result<bool, bool> {
-    let (module, _, _) = parse(file_content).expect("Failed to parse imports");
+    let (module, _, _) = match parse(file_content) {
+        Ok(result) => result,
+        Err(_) => return Err(false),
+    };
 
     for item in &module.body {
         if let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var_decl))) = item {
@@ -614,6 +689,105 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
+
+    /// Adding and querying still need real import statements, so a bare
+    /// specifier must surface as an error rather than a panic.
+    #[test]
+    fn test_unparseable_argument_returns_error_instead_of_panicking() {
+        let code = "import topbar from \"../vendor/topbar\";\nlet Hooks = {};\n";
+        let invalid = "../vendor/topbar";
+
+        let result = insert_import_to_ast(code, invalid);
+        assert!(
+            result.is_err(),
+            "insert_import_to_ast should error, got {:?}",
+            result
+        );
+
+        let result = is_module_imported_from_ast(code, invalid);
+        assert_eq!(
+            result,
+            Err(false),
+            "is_module_imported_from_ast should report not-imported"
+        );
+    }
+
+    /// The same guarantee for unparseable source rather than an unparseable
+    /// argument.
+    #[test]
+    fn test_unparseable_source_returns_error_instead_of_panicking() {
+        let broken = "let x = ;;; import * from;";
+
+        assert_eq!(contains_variable_from_ast(broken, "x"), Err(false));
+        assert!(remove_import_from_ast(broken, "topbar").is_err());
+    }
+
+    const TWO_IMPORTS: &str =
+        "import { Socket } from \"phoenix\";\nimport topbar from \"../vendor/topbar\";\nlet Hooks = {};\n";
+
+    #[test]
+    fn test_remove_import_by_bare_module_specifier() {
+        let result = remove_import_from_ast(TWO_IMPORTS, "../vendor/topbar").unwrap();
+
+        assert!(!result.contains("topbar"), "got: {result}");
+        assert!(result.contains("phoenix"), "got: {result}");
+        assert!(result.contains("let Hooks"), "got: {result}");
+    }
+
+    #[test]
+    fn test_remove_import_by_full_statement_still_works() {
+        let result =
+            remove_import_from_ast(TWO_IMPORTS, "import topbar from \"../vendor/topbar\";")
+                .unwrap();
+
+        assert!(!result.contains("topbar"), "got: {result}");
+        assert!(result.contains("phoenix"), "got: {result}");
+    }
+
+    #[test]
+    fn test_remove_several_bare_specifiers_one_per_line() {
+        let result = remove_import_from_ast(TWO_IMPORTS, "phoenix\n../vendor/topbar").unwrap();
+
+        assert!(!result.contains("topbar"), "got: {result}");
+        assert!(!result.contains("phoenix"), "got: {result}");
+        assert!(result.contains("let Hooks"), "got: {result}");
+    }
+
+    /// A multi-line import statement must not have its inner lines mistaken for
+    /// bare module specifiers.
+    #[test]
+    fn test_multiline_import_statement_does_not_leak_literal_targets() {
+        let code = "import x from \"foo\";\nimport { foo } from \"module-name\";\n";
+        let argument = "import {\n  foo\n} from \"module-name\";";
+
+        let result = remove_import_from_ast(code, argument).unwrap();
+
+        assert!(result.contains("import x from \"foo\";"), "got: {result}");
+        assert!(!result.contains("module-name"), "got: {result}");
+    }
+
+    /// Matching is on the module source, so the local binding name is not a
+    /// removal key.
+    #[test]
+    fn test_remove_import_does_not_match_local_binding_name() {
+        let result = remove_import_from_ast(TWO_IMPORTS, "topbar").unwrap();
+
+        assert!(result.contains("../vendor/topbar"), "got: {result}");
+    }
+
+    #[test]
+    fn test_remove_import_of_an_absent_module_is_a_no_op() {
+        let result = remove_import_from_ast(TWO_IMPORTS, "not-imported").unwrap();
+
+        assert_eq!(result.trim(), TWO_IMPORTS.trim());
+    }
+
+    #[test]
+    fn test_remove_import_with_a_blank_argument_is_a_no_op() {
+        let result = remove_import_from_ast(TWO_IMPORTS, "   ").unwrap();
+
+        assert_eq!(result.trim(), TWO_IMPORTS.trim());
+    }
 
     #[test]
     fn test_is_module_imported_from_ast() {
@@ -839,8 +1013,7 @@ mod tests {
         println!("{:#?}", result.unwrap())
     }
 
-    #[cfg(test)]
-    mod tests {
+    mod index_operations {
         use super::*;
 
         #[test]

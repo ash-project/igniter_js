@@ -293,7 +293,10 @@ pub fn remove_objects_of_hooks_from_ast(
 ) -> Result<String, String> {
     let mut hook_extender = HookExtender::new("liveSocket", vec![]);
 
-    let (mut module, comments, cm) = parse(file_content).expect("Failed to parse imports");
+    let (mut module, comments, cm) = match parse(file_content) {
+        Ok(result) => result,
+        Err(_) => return Err("Failed to parse JavaScript content".to_string()),
+    };
 
     module.visit_mut_with(&mut hook_extender);
 
@@ -329,6 +332,15 @@ pub fn remove_objects_of_hooks_from_ast(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Unparseable source must surface as an error.
+    #[test]
+    fn test_remove_objects_of_hooks_from_unparseable_source() {
+        let broken = "let liveSocket = new LiveSocket(;;;";
+
+        let result = remove_objects_of_hooks_from_ast(broken, vec!["SomeHook"]);
+        assert!(result.is_err(), "expected an error, got {:?}", result);
+    }
 
     #[test]
     fn test_extend_hook_object_to_ast() {
@@ -505,9 +517,18 @@ mod tests {
     fn test_extend_hooks_with_const_let_var_declarations() {
         // Test with different variable declaration types
         let test_cases = vec![
-            ("const", r#"const liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
-            ("let", r#"let liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
-            ("var", r#"var liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
+            (
+                "const",
+                r#"const liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
+            (
+                "let",
+                r#"let liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
+            (
+                "var",
+                r#"var liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
         ];
 
         for (decl_type, code) in test_cases {

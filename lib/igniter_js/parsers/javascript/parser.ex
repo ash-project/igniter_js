@@ -68,14 +68,24 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   end
 
   @doc """
-  Remove imports from the given file or content. it accepts a single module or a list of modules.
-  It returns a tuple.
+  Remove imports from the given file or content. It returns a tuple.
+
+  The modules are given as one string, one per line. Each line may be either a bare module
+  specifier or a full import statement:
 
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
-  Parser.remove_imports(js_content, "SomeModule")
+
+  Parser.remove_imports(js_content, "topbar")
+  Parser.remove_imports(js_content, "../vendor/topbar")
+  Parser.remove_imports(js_content, ~s|import topbar from "../vendor/topbar";|)
+  Parser.remove_imports(js_content, "phoenix\\n../vendor/topbar")
   Parser.remove_imports("/path/to/file.js", "SomeModule", :path)
   ```
+
+  Matching is done on the module source, which is the text between the quotes, and not on
+  the local binding name. So given `import topbar from "../vendor/topbar";`, removing
+  `"../vendor/topbar"` works but removing `"topbar"` does not.
   """
   def remove_imports(file_path_or_content, module, type \\ :content)
 
@@ -130,13 +140,13 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
 
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
-  Parser.exist_live_socket?(js_content)
-  Parser.exist_live_socket?(js_content, :content)
-  Parser.exist_live_socket?("/path/to/file.js", :path)
+  Parser.var_exists?(js_content, "Hooks")
+  Parser.var_exists?(js_content, "Hooks", :content)
+  Parser.var_exists?("/path/to/file.js", "Hooks", :path)
   ```
   """
-  def var_exists?(file_path_or_content, type \\ :content) do
-    elem(exist_var(file_path_or_content, type), 0) == :ok
+  def var_exists?(file_path_or_content, var_name, type \\ :content) do
+    elem(exist_var(file_path_or_content, var_name, type), 0) == :ok
   end
 
   @doc """
@@ -227,6 +237,14 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   This function accepts either the content of the JavaScript file or the path to the file,
   and returns a tuple with the status, function atom, and the extracted data as a map.
 
+  On success the third element is a map of counts. When the path cannot be read it is a
+  reason string instead:
+
+  ```elixir
+  {:ok, :statistics, %{functions: 1, classes: 0, debuggers: 0, imports: 2, trys: 0, throws: 0}}
+  {:error, :statistics, "Invalid file path or format."}
+  ```
+
   ## Examples
 
   ```elixir
@@ -240,18 +258,22 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   ```
   """
   def statistics(file_path_or_content, type \\ :content) do
-    {status, fn_atom, {_, data}} =
-      call_nif_fn(
-        file_path_or_content,
-        __ENV__.function,
-        fn file_content ->
-          Native.statistics_from_ast_nif(file_content)
-        end,
-        type
-      )
+    file_path_or_content
+    |> call_nif_fn(
+      __ENV__.function,
+      fn file_content ->
+        Native.statistics_from_ast_nif(file_content)
+      end,
+      type
+    )
+    |> case do
+      {status, fn_atom, {_tag, data}} ->
+        converted = if is_map(data), do: Map.drop(data, [:__struct__]), else: data
+        {status, fn_atom, converted}
 
-    converted = if is_map(data), do: Map.drop(data, [:__struct__]), else: data
-    {status, fn_atom, converted}
+      {status, fn_atom, reason} ->
+        {status, fn_atom, reason}
+    end
   end
 
   @doc """

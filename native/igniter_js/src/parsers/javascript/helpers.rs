@@ -137,3 +137,123 @@ fn specifier_equals(new_spec: &ImportSpecifier, existing_spec: &ImportSpecifier)
 pub fn replace_four_spaces_with_tab(input: &str) -> String {
     input.replace("    ", "\t")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn items(code: &str) -> Vec<ModuleItem> {
+        parse(code).expect("test fixture must parse").0.body
+    }
+
+    fn first_item(code: &str) -> ModuleItem {
+        items(code).into_iter().next().expect("expected one item")
+    }
+
+    #[test]
+    fn parse_accepts_valid_source() {
+        assert!(parse("const a = 1;").is_ok());
+        assert!(parse("").is_ok());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_source() {
+        match parse("const a = ;") {
+            Err(reason) => assert_eq!(reason, "Failed to parse module"),
+            Ok(_) => panic!("expected a parse error"),
+        }
+
+        assert!(parse("import * from;").is_err());
+    }
+
+    #[test]
+    fn code_gen_reports_unparseable_source() {
+        struct Noop;
+        impl VisitMut for Noop {}
+
+        assert!(code_gen_from_ast_vist("const a = ;", Noop).is_err());
+        assert!(code_gen_from_ast_vist("const a = 1;", Noop).is_ok());
+    }
+
+    #[test]
+    fn code_gen_preserves_comments() {
+        struct Noop;
+        impl VisitMut for Noop {}
+
+        let output = code_gen_from_ast_vist("// keep me\nconst a = 1;", Noop).unwrap();
+        assert!(output.contains("// keep me"), "got: {output}");
+    }
+
+    #[test]
+    fn duplicate_named_import_is_detected() {
+        let body = items(r#"import { Socket } from "phoenix";"#);
+        let candidate = first_item(r#"import { Socket } from "phoenix";"#);
+
+        assert!(is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn duplicate_default_import_is_detected() {
+        let body = items(r#"import topbar from "topbar";"#);
+        let candidate = first_item(r#"import topbar from "topbar";"#);
+
+        assert!(is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn duplicate_namespace_import_is_detected() {
+        let body = items(r#"import * as All from "mod";"#);
+        let candidate = first_item(r#"import * as All from "mod";"#);
+
+        assert!(is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn same_source_with_a_new_specifier_is_not_duplicate() {
+        let body = items(r#"import { Socket } from "phoenix";"#);
+        let candidate = first_item(r#"import { Socket, LiveSocket } from "phoenix";"#);
+
+        assert!(!is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn different_source_is_not_duplicate() {
+        let body = items(r#"import { Socket } from "phoenix";"#);
+        let candidate = first_item(r#"import { Socket } from "other";"#);
+
+        assert!(!is_duplicate_import(&candidate, &body));
+    }
+
+    /// Specifier kinds must match, so a default and a named import that share a
+    /// local name are still distinct.
+    #[test]
+    fn default_and_named_specifiers_are_distinct() {
+        let body = items(r#"import { Socket } from "phoenix";"#);
+        let candidate = first_item(r#"import Socket from "phoenix";"#);
+
+        assert!(!is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn non_import_items_are_never_duplicates() {
+        let body = items(r#"import { Socket } from "phoenix";"#);
+        let candidate = first_item("const a = 1;");
+
+        assert!(!is_duplicate_import(&candidate, &body));
+    }
+
+    #[test]
+    fn empty_body_has_no_duplicates() {
+        let candidate = first_item(r#"import { Socket } from "phoenix";"#);
+
+        assert!(!is_duplicate_import(&candidate, &[]));
+    }
+
+    #[test]
+    fn replace_four_spaces_with_tab_converts_indentation() {
+        assert_eq!(replace_four_spaces_with_tab("    a"), "\ta");
+        assert_eq!(replace_four_spaces_with_tab("        a"), "\t\ta");
+        assert_eq!(replace_four_spaces_with_tab("  a"), "  a");
+        assert_eq!(replace_four_spaces_with_tab(""), "");
+    }
+}

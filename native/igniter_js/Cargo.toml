@@ -14,12 +14,12 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-swc_common = { version = "14.0.3", features = ["tty-emitter"] }
-swc_ecma_parser = { version = "24.0.0" }
-swc_ecma_visit = "15.0.0"
-swc_ecma_ast = "15.0.0"
-swc_ecma_codegen = "17.0.0"
-rustler = "=0.36.2"
+swc_common = { version = "24.0.0", features = ["tty-emitter"] }
+swc_ecma_parser = { version = "43.0.0" }
+swc_ecma_visit = "27.0.0"
+swc_ecma_ast = "27.0.0"
+swc_ecma_codegen = "30.0.0"
+rustler = "=0.38.0"
 
 biome_console = "=0.5.7"
 biome_deserialize = "=0.5.7"
@@ -45,11 +45,11 @@ biome_css_formatter = "=0.5.7"
 biome_css_parser = "=0.5.7"
 biome_css_syntax = "=0.5.7"
 biome_css_factory = "=0.5.7"
-serde = "1.0.219"
-serde_json = "1.0.143"
-oxc_allocator = "0.86.0"
-oxc_ast = "0.86.0"
-oxc_parser = "0.86.0"
-oxc_span = "0.86.0"
-oxc_ast_visit = { version = "0.86.0", features = ["serialize"] }
-oxc_diagnostics = "0.86.0"
+serde = "1.0.229"
+serde_json = "1.0.151"
+oxc_allocator = "0.142.0"
+oxc_ast = "0.142.0"
+oxc_parser = "0.142.0"
+oxc_span = "0.142.0"
+oxc_ast_visit = { version = "0.142.0", features = ["serialize"] }
+oxc_diagnostics = "0.142.0"
