@@ -68,14 +68,24 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   end
 
   @doc """
-  Remove imports from the given file or content. it accepts a single module or a list of modules.
-  It returns a tuple.
+  Remove imports from the given file or content. It returns a tuple.
+
+  The modules are given as one string, one per line. Each line may be either a bare module
+  specifier or a full import statement:
 
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
-  Parser.remove_imports(js_content, "SomeModule")
+
+  Parser.remove_imports(js_content, "topbar")
+  Parser.remove_imports(js_content, "../vendor/topbar")
+  Parser.remove_imports(js_content, ~s|import topbar from "../vendor/topbar";|)
+  Parser.remove_imports(js_content, "phoenix\\n../vendor/topbar")
   Parser.remove_imports("/path/to/file.js", "SomeModule", :path)
   ```
+
+  Matching is done on the module source, which is the text between the quotes, and not on
+  the local binding name. So given `import topbar from "../vendor/topbar";`, removing
+  `"../vendor/topbar"` works but removing `"topbar"` does not.
   """
   def remove_imports(file_path_or_content, module, type \\ :content)
 

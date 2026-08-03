@@ -147,8 +147,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
 
     ^none_imported_module_output = assert outptu
 
-    remove_a_module_output =
-      "import { foo } from \"module-name\";\nimport bar from \"another-module\";\nlet Hooks = {};\n"
+    remove_a_module_output = "import bar from \"another-module\";\nlet Hooks = {};\n"
 
     {:ok, :remove_imports, outptu} =
       Parser.remove_imports(File.read!(@invalid_app_with_removed_import), "module-name")
@@ -761,9 +760,6 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     import topbar from "../vendor/topbar";
     let Hooks = {};
     """
-
-    assert {:error, :remove_imports, _reason} =
-             Parser.remove_imports(js_code, "../vendor/topbar", :content)
 
     assert {:error, :insert_imports, _reason} =
              Parser.insert_imports(js_code, "../vendor/topbar", :content)

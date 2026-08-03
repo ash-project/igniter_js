@@ -245,13 +245,58 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserEdgeCasesTest do
       assert output =~ "let x = 1;"
     end
 
-    test "remove_imports/3 reports :ok but changes nothing for a bare module name" do
+    test "remove_imports/3 removes by bare module specifier" do
       code = ~s|import a from "mod-a";\nimport b from "mod-b";\n|
 
       assert {:ok, :remove_imports, output} = Parser.remove_imports(code, "mod-a")
 
-      assert output =~ "mod-a"
+      refute output =~ "mod-a"
       assert output =~ "mod-b"
+    end
+
+    test "remove_imports/3 removes by a path-style specifier" do
+      code = ~s|import topbar from "../vendor/topbar";\nlet Hooks = {};\n|
+
+      assert {:ok, :remove_imports, output} = Parser.remove_imports(code, "../vendor/topbar")
+
+      refute output =~ "topbar"
+      assert output =~ "let Hooks"
+    end
+
+    test "remove_imports/3 matches the module source, not the local binding" do
+      code = ~s|import topbar from "../vendor/topbar";\n|
+
+      assert {:ok, :remove_imports, output} = Parser.remove_imports(code, "topbar")
+
+      assert output =~ "../vendor/topbar"
+    end
+
+    test "remove_imports/3 accepts several bare specifiers, one per line" do
+      code = ~s|import a from "mod-a";\nimport b from "mod-b";\nlet x = 1;\n|
+
+      assert {:ok, :remove_imports, output} = Parser.remove_imports(code, "mod-a\nmod-b")
+
+      refute output =~ "mod-a"
+      refute output =~ "mod-b"
+      assert output =~ "let x = 1;"
+    end
+
+    test "remove_imports/3 leaves a multi-line import statement's inner lines alone" do
+      code = ~s|import x from "foo";\nimport { foo } from "mod-a";\n|
+      argument = ~s|import {\n  foo\n} from "mod-a";|
+
+      assert {:ok, :remove_imports, output} = Parser.remove_imports(code, argument)
+
+      assert output =~ ~s|import x from "foo";|
+      refute output =~ "mod-a"
+    end
+
+    test "remove_imports/3 is a no-op for an unmatched module" do
+      code = ~s|import a from "mod-a";\n|
+
+      assert {:ok, :remove_imports, output} = Parser.remove_imports(code, "not-imported")
+
+      assert output =~ "mod-a"
     end
   end
 
