@@ -517,9 +517,18 @@ mod tests {
     fn test_extend_hooks_with_const_let_var_declarations() {
         // Test with different variable declaration types
         let test_cases = vec![
-            ("const", r#"const liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
-            ("let", r#"let liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
-            ("var", r#"var liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#),
+            (
+                "const",
+                r#"const liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
+            (
+                "let",
+                r#"let liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
+            (
+                "var",
+                r#"var liveSocket = new LiveSocket("/live", Socket, { hooks: {} });"#,
+            ),
         ];
 
         for (decl_type, code) in test_cases {
