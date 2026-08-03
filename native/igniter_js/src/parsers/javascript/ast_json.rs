@@ -55,7 +55,7 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
         .parse();
 
     let errors = parser_return
-        .errors
+        .diagnostics
         .into_iter()
         .map(|e| {
             let severity = match e.severity {
@@ -66,23 +66,31 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
 
             let help = e.help.as_ref().map(|h| h.to_string());
 
-            let labels = e.labels.as_ref().map(|labels| {
-                labels
-                    .iter()
-                    .map(|label| {
-                        let span = label.inner();
-                        let start = span.offset();
-                        let end = start + span.len();
+            // oxc >= 0.100 changed `labels` from `Option<Vec<LabeledSpan>>` to a
+            // non-optional `Labels` slice wrapper. Map the empty case back to `None`
+            // so the emitted JSON keeps `null` (rather than `[]`) for label-less
+            // diagnostics, as it did before.
+            let labels = if e.labels.is_empty() {
+                None
+            } else {
+                Some(
+                    e.labels
+                        .iter()
+                        .map(|label| {
+                            let span = label.inner();
+                            let start = span.offset();
+                            let end = start + span.len();
 
-                        json!({
-                            "start": start,
-                            "end": end,
-                            "label": label.label().map(|s| s.to_string()),
-                            "primary": label.primary()
+                            json!({
+                                "start": start,
+                                "end": end,
+                                "label": label.label().map(|s| s.to_string()),
+                                "primary": label.primary()
+                            })
                         })
-                    })
-                    .collect::<Vec<_>>()
-            });
+                        .collect::<Vec<_>>(),
+                )
+            };
 
             let code = e.code.to_string();
             let url = e.url.as_ref().map(|u| u.to_string());
@@ -119,7 +127,10 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
             })
         })
         .collect();
-    let estree_json = program.to_pretty_estree_ts_json(true);
+    // oxc >= 0.100 merged the `_ts_`/`_js_` variants into one method: the TS-field
+    // flag moved from the method name into the first argument, and the old single
+    // `ranges` argument is now the second one.
+    let estree_json = program.to_pretty_estree_json(true, true);
 
     let full_json = json!({
         "program": serde_json::from_str::<serde_json::Value>(&estree_json).unwrap_or(json!({})),

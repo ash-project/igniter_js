@@ -120,7 +120,7 @@ impl VisitMut for ASTVisitImport<'_> {
 
                     for imp in import.as_module_decl().iter() {
                         if let ModuleDecl::Import(import_decl) = imp {
-                            let src_value = import_decl.src.value.to_string();
+                            let src_value = import_decl.src.value.to_string_lossy().to_string();
                             if !self.none_duplicate_imports.contains(&src_value) {
                                 self.none_duplicate_imports.push(src_value);
                             }
@@ -136,7 +136,7 @@ impl VisitMut for ASTVisitImport<'_> {
             } else if matches!(self.operation, Operation::Read) {
                 if let ModuleItem::ModuleDecl(ModuleDecl::Import(new_import_decl)) = import {
                     self.duplicate_imports
-                        .push(new_import_decl.src.value.to_string());
+                        .push(new_import_decl.src.value.to_string_lossy().to_string());
                 }
             }
         }
