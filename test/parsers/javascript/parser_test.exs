@@ -755,6 +755,45 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserTest do
     assert length(Regex.scan(~r/\bNewHook\b/, output)) == 1
   end
 
+  test "Unparseable arguments return an error tuple instead of panicking the NIF" do
+    js_code = """
+    import { Socket } from "phoenix";
+    import topbar from "../vendor/topbar";
+    let Hooks = {};
+    """
+
+    # The second argument is parsed as JavaScript, so a bare filesystem path
+    # is a syntax error.
+    assert {:error, :remove_imports, _reason} =
+             Parser.remove_imports(js_code, "../vendor/topbar", :content)
+
+    assert {:error, :insert_imports, _reason} =
+             Parser.insert_imports(js_code, "../vendor/topbar", :content)
+
+    assert {:error, :module_imported, false} =
+             Parser.module_imported(js_code, "../vendor/topbar", :content)
+
+    refute Parser.module_imported?(js_code, "../vendor/topbar", :content)
+
+    # The supported spellings still work.
+    assert {:ok, :remove_imports, output} =
+             Parser.remove_imports(js_code, ~s|import topbar from "../vendor/topbar";|, :content)
+
+    refute String.contains?(output, "topbar")
+  end
+
+  test "Unparseable source returns an error tuple instead of panicking the NIF" do
+    broken = "let x = ;;; import * from;"
+
+    assert {:error, :remove_imports, _reason} =
+             Parser.remove_imports(broken, "topbar", :content)
+
+    assert {:error, :exist_var, _reason} = Parser.exist_var(broken, "x", :content)
+
+    assert {:error, :remove_objects_from_hooks, _reason} =
+             Parser.remove_objects_from_hooks(broken, "SomeHook", :content)
+  end
+
   defp string_counter(string, pattern) do
     Regex.scan(Regex.compile!(pattern), string)
     |> length()

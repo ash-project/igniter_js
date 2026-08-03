@@ -64,6 +64,10 @@ struct ASTVisitImport<'a> {
     duplicate_imports: Vec<String>,
     none_duplicate_imports: Vec<String>,
     operation: Operation,
+    /// Set when `code` cannot be parsed as JavaScript. `VisitMut` methods
+    /// return `()`, so callers must check this once the visit completes and
+    /// surface it as an error.
+    parse_error: Option<String>,
 }
 
 impl Default for ASTVisitImport<'_> {
@@ -73,14 +77,29 @@ impl Default for ASTVisitImport<'_> {
             duplicate_imports: Vec::new(),
             none_duplicate_imports: Vec::new(),
             operation: Operation::Edit,
+            parse_error: None,
         }
     }
 }
 
+/// Returned when the module/import argument is not valid JavaScript. The
+/// argument is parsed as source, so a bare filesystem path such as
+/// `../vendor/topbar` is a syntax error.
+const INVALID_ARGUMENT_MESSAGE: &str =
+    "The given module or import argument is not valid JavaScript and could not be parsed. \
+     Provide a bare module name (`topbar`) or a full import statement \
+     (`import topbar from \"../vendor/topbar\";`).";
+
 impl VisitMut for ASTVisitImport<'_> {
     fn visit_mut_module_items(&mut self, items: &mut Vec<ModuleItem>) {
         // We are using it to delete imports
-        let (imports, _comments, _cm) = parse(self.code).expect("Failed to parse imports");
+        let imports = match parse(self.code) {
+            Ok((imports, _comments, _cm)) => imports,
+            Err(_) => {
+                self.parse_error = Some(INVALID_ARGUMENT_MESSAGE.to_string());
+                return;
+            }
+        };
 
         if matches!(self.operation, Operation::Delete) {
             let mut indices_to_remove = vec![];
@@ -106,7 +125,13 @@ impl VisitMut for ASTVisitImport<'_> {
 
     fn visit_mut_module(&mut self, module: &mut Module) {
         // We are using it to add imports and know it is duplicated or not
-        let (imports, _comments, _cm) = parse(self.code).expect("Failed to parse imports");
+        let imports = match parse(self.code) {
+            Ok((imports, _comments, _cm)) => imports,
+            Err(_) => {
+                self.parse_error = Some(INVALID_ARGUMENT_MESSAGE.to_string());
+                return;
+            }
+        };
 
         for import in imports.body {
             if !is_duplicate_import(&import, &module.body) {
@@ -166,6 +191,11 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
 
     let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
 
+    // An unparseable `module_name` cannot be imported by definition.
+    if import_visitor.parse_error.is_some() {
+        return Err(false);
+    }
+
     if import_visitor.none_duplicate_imports.is_empty()
         && import_visitor.duplicate_imports.is_empty()
     {
@@ -201,7 +231,12 @@ pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<St
         ..Default::default()
     };
 
-    code_gen_from_ast_vist(file_content, &mut import_visitor)
+    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+
+    match import_visitor.parse_error {
+        Some(error) => Err(error),
+        None => Ok(output),
+    }
 }
 
 /// Removes specified import statements from JavaScript source code.
@@ -228,7 +263,12 @@ pub fn remove_import_from_ast(file_content: &str, modules: &str) -> Result<Strin
         ..Default::default()
     };
 
-    code_gen_from_ast_vist(file_content, &mut import_visitor)
+    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+
+    match import_visitor.parse_error {
+        Some(error) => Err(error),
+        None => Ok(output),
+    }
 }
 
 // ###################################################################################
@@ -490,7 +530,11 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
 /// assert_eq!(result, Err(false));
 /// ```
 pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Result<bool, bool> {
-    let (module, _, _) = parse(file_content).expect("Failed to parse imports");
+    // `Err(false)` covers both "not found" and "source did not parse".
+    let (module, _, _) = match parse(file_content) {
+        Ok(result) => result,
+        Err(_) => return Err(false),
+    };
 
     for item in &module.body {
         if let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var_decl))) = item {
@@ -614,6 +658,45 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
+
+    /// Arguments are parsed as JavaScript source, so a bare filesystem path
+    /// is a syntax error and must surface as an error.
+    #[test]
+    fn test_unparseable_argument_returns_error_instead_of_panicking() {
+        let code = "import topbar from \"../vendor/topbar\";\nlet Hooks = {};\n";
+        let invalid = "../vendor/topbar";
+
+        let result = remove_import_from_ast(code, invalid);
+        assert!(
+            result.is_err(),
+            "remove_import_from_ast should error, got {:?}",
+            result
+        );
+
+        let result = insert_import_to_ast(code, invalid);
+        assert!(
+            result.is_err(),
+            "insert_import_to_ast should error, got {:?}",
+            result
+        );
+
+        let result = is_module_imported_from_ast(code, invalid);
+        assert_eq!(
+            result,
+            Err(false),
+            "is_module_imported_from_ast should report not-imported"
+        );
+    }
+
+    /// The same guarantee for unparseable source rather than an unparseable
+    /// argument.
+    #[test]
+    fn test_unparseable_source_returns_error_instead_of_panicking() {
+        let broken = "let x = ;;; import * from;";
+
+        assert_eq!(contains_variable_from_ast(broken, "x"), Err(false));
+        assert!(remove_import_from_ast(broken, "topbar").is_err());
+    }
 
     #[test]
     fn test_is_module_imported_from_ast() {

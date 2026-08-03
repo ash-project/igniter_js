@@ -66,10 +66,7 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
 
             let help = e.help.as_ref().map(|h| h.to_string());
 
-            // oxc >= 0.100 changed `labels` from `Option<Vec<LabeledSpan>>` to a
-            // non-optional `Labels` slice wrapper. Map the empty case back to `None`
-            // so the emitted JSON keeps `null` (rather than `[]`) for label-less
-            // diagnostics, as it did before.
+            // Label-less diagnostics serialize as `null`, not `[]`.
             let labels = if e.labels.is_empty() {
                 None
             } else {
@@ -127,9 +124,8 @@ pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
             })
         })
         .collect();
-    // oxc >= 0.100 merged the `_ts_`/`_js_` variants into one method: the TS-field
-    // flag moved from the method name into the first argument, and the old single
-    // `ranges` argument is now the second one.
+    // Arguments are (include_ts_fields, ranges); `ranges` adds `range: [start, end]`
+    // to every node alongside `start`/`end`.
     let estree_json = program.to_pretty_estree_json(true, true);
 
     let full_json = json!({
