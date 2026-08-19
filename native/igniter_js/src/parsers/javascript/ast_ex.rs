@@ -8,20 +8,37 @@ use std::collections::HashSet;
 use crate::atoms;
 use crate::helpers::encode_response;
 use crate::parsers::javascript::ast::*;
-use crate::parsers::javascript::ast_json::convert_ast_to_estree;
+use crate::parsers::javascript::ast_json::convert_ast_to_estree_as;
+use crate::parsers::javascript::dialect::Dialect;
 use crate::parsers::javascript::phoenix::*;
 use rustler::{Env, NifResult, NifStruct, NifTaggedEnum, Term};
+
+
+/// Resolve a dialect name coming from Elixir.
+///
+/// The Elixir side always sends one of `"js"`, `"jsx"`, `"ts"`, `"tsx"`, defaulting to `"js"`, so
+/// an unrecognised value means the caller asked for something this crate does not support. Saying
+/// so beats parsing their TypeScript as JavaScript and reporting a syntax error they cannot
+/// explain.
+fn dialect_or_error(name: &str) -> Result<Dialect, String> {
+    Dialect::from_name(name)
+}
 
 #[rustler::nif]
 pub fn is_module_imported_from_ast_nif(
     env: Env,
     file_content: String,
     module_name: String,
+    dialect: String,
 ) -> NifResult<Term> {
     let fn_atom = atoms::is_module_imported_from_ast_nif();
-    let (status, result) = match is_module_imported_from_ast(&file_content, &module_name) {
-        Ok(true) => (atoms::ok(), true),
-        _ => (atoms::error(), false),
+
+    let (status, result) = match dialect_or_error(&dialect) {
+        Err(_) => (atoms::error(), false),
+        Ok(dialect) => match is_module_imported_from_ast(&file_content, &module_name, dialect) {
+            Ok(true) => (atoms::ok(), true),
+            _ => (atoms::error(), false),
+        },
     };
 
     encode_response(env, status, fn_atom, result)
@@ -32,8 +49,11 @@ pub fn insert_import_to_ast_nif(
     env: Env,
     file_content: String,
     import_lines: String,
+    dialect: String,
 ) -> NifResult<Term> {
-    let (status, result) = match insert_import_to_ast(&file_content, &import_lines) {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| insert_import_to_ast(&file_content, &import_lines, dialect))
+    {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -42,8 +62,15 @@ pub fn insert_import_to_ast_nif(
 }
 
 #[rustler::nif]
-fn remove_import_from_ast_nif(env: Env, file_content: String, modules: String) -> NifResult<Term> {
-    let (status, result) = match remove_import_from_ast(&file_content, &modules) {
+fn remove_import_from_ast_nif(
+    env: Env,
+    file_content: String,
+    modules: String,
+    dialect: String,
+) -> NifResult<Term> {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| remove_import_from_ast(&file_content, &modules, dialect))
+    {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -68,12 +95,16 @@ pub fn contains_variable_from_ast_nif(
     env: Env,
     file_content: String,
     variable_name: String,
+    dialect: String,
 ) -> NifResult<Term> {
     let fn_atom = atoms::contains_variable_from_ast_nif();
 
-    let (status, result) = match contains_variable_from_ast(&file_content, &variable_name) {
-        Ok(true) => (atoms::ok(), true),
-        _ => (atoms::error(), false),
+    let (status, result) = match dialect_or_error(&dialect) {
+        Err(_) => (atoms::error(), false),
+        Ok(dialect) => match contains_variable_from_ast(&file_content, &variable_name, dialect) {
+            Ok(true) => (atoms::ok(), true),
+            _ => (atoms::error(), false),
+        },
     };
 
     encode_response(env, status, fn_atom, result)
@@ -130,10 +161,12 @@ pub enum ASTStatisticsResultType {
 }
 
 #[rustler::nif]
-fn statistics_from_ast_nif(env: Env, file_content: String) -> NifResult<Term> {
+fn statistics_from_ast_nif(env: Env, file_content: String, dialect: String) -> NifResult<Term> {
     let fn_atom = atoms::statistics_from_ast_nif();
 
-    let (status, result) = match statistics_from_ast(&file_content) {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| statistics_from_ast(&file_content, dialect))
+    {
         Ok(updated_code) => (
             atoms::ok(),
             ASTStatisticsResultType::Statistics(ASTStatisticsResult {
@@ -157,16 +190,18 @@ pub fn extend_var_object_property_by_names_to_ast_nif(
     file_content: String,
     var_name: String,
     object_names: Vec<String>,
+    dialect: String,
 ) -> NifResult<Term> {
     let unique_names: HashSet<String> = object_names.into_iter().collect();
     let mut vec_of_strs: Vec<&str> = unique_names.iter().map(|s| s.as_str()).collect();
     vec_of_strs.sort();
 
-    let (status, result) =
-        match extend_var_object_property_by_names_to_ast(&file_content, &var_name, vec_of_strs) {
-            Ok(updated_code) => (atoms::ok(), updated_code),
-            Err(error_msg) => (atoms::error(), error_msg),
-        };
+    let (status, result) = match dialect_or_error(&dialect).and_then(|dialect| {
+        extend_var_object_property_by_names_to_ast(&file_content, &var_name, vec_of_strs, dialect)
+    }) {
+        Ok(updated_code) => (atoms::ok(), updated_code),
+        Err(error_msg) => (atoms::error(), error_msg),
+    };
 
     encode_response(
         env,
@@ -177,8 +212,14 @@ pub fn extend_var_object_property_by_names_to_ast_nif(
 }
 
 #[rustler::nif]
-pub fn convert_ast_to_estree_nif(env: Env, file_content: String) -> NifResult<Term> {
-    let (status, result) = match convert_ast_to_estree(&file_content) {
+pub fn convert_ast_to_estree_nif(
+    env: Env,
+    file_content: String,
+    dialect: String,
+) -> NifResult<Term> {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| convert_ast_to_estree_as(&file_content, dialect))
+    {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -192,8 +233,11 @@ pub fn insert_ast_at_index_nif(
     file_content: String,
     insert_code: String,
     index: usize,
+    dialect: String,
 ) -> NifResult<Term> {
-    let (status, result) = match insert_ast_at_index(&file_content, &insert_code, index) {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| insert_ast_at_index(&file_content, &insert_code, index, dialect))
+    {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };
@@ -207,8 +251,11 @@ pub fn replace_ast_at_index_nif(
     file_content: String,
     replace_code: String,
     index: usize,
+    dialect: String,
 ) -> NifResult<Term> {
-    let (status, result) = match replace_ast_at_index(&file_content, &replace_code, index) {
+    let (status, result) = match dialect_or_error(&dialect)
+        .and_then(|dialect| replace_ast_at_index(&file_content, &replace_code, index, dialect))
+    {
         Ok(updated_code) => (atoms::ok(), updated_code),
         Err(error_msg) => (atoms::error(), error_msg),
     };

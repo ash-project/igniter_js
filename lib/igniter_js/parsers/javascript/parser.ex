@@ -9,7 +9,7 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   """
 
   alias IgniterJs.Native
-  import IgniterJs.Helpers, only: [call_nif_fn: 4]
+  import IgniterJs.Helpers, only: [call_nif_fn: 4, dialect_for: 3]
 
   @doc """
   Check if a module is imported in the given file or content or content and returns boolean.
@@ -21,8 +21,8 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.module_imported?("/path/to/file.js", "module", :path)
   ```
   """
-  def module_imported?(file_path_or_content, module, type \\ :content) do
-    elem(module_imported(file_path_or_content, module, type), 0) == :ok
+  def module_imported?(file_path_or_content, module, type \\ :content, opts \\ []) do
+    elem(module_imported(file_path_or_content, module, type, opts), 0) == :ok
   end
 
   @doc """
@@ -35,12 +35,16 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.module_imported("/path/to/file.js", "module", :path)
   ```
   """
-  def module_imported(file_path_or_content, module, type \\ :content) do
+  def module_imported(file_path_or_content, module, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.is_module_imported_from_ast_nif(file_content, module)
+        Native.is_module_imported_from_ast_nif(
+          file_content,
+          module,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -56,12 +60,16 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.insert_imports("/path/to/file.js", imports_lines, :path)
   ```
   """
-  def insert_imports(file_path_or_content, imports_lines, type \\ :content) do
+  def insert_imports(file_path_or_content, imports_lines, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.insert_import_to_ast_nif(file_content, imports_lines)
+        Native.insert_import_to_ast_nif(
+          file_content,
+          imports_lines,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -87,14 +95,18 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   the local binding name. So given `import topbar from "../vendor/topbar";`, removing
   `"../vendor/topbar"` works but removing `"topbar"` does not.
   """
-  def remove_imports(file_path_or_content, module, type \\ :content)
+  def remove_imports(file_path_or_content, module, type \\ :content, opts \\ [])
 
-  def remove_imports(file_path_or_content, modules, type) do
+  def remove_imports(file_path_or_content, modules, type, opts) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.remove_import_from_ast_nif(file_content, modules)
+        Native.remove_import_from_ast_nif(
+          file_content,
+          modules,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -145,8 +157,8 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.var_exists?("/path/to/file.js", "Hooks", :path)
   ```
   """
-  def var_exists?(file_path_or_content, var_name, type \\ :content) do
-    elem(exist_var(file_path_or_content, var_name, type), 0) == :ok
+  def var_exists?(file_path_or_content, var_name, type \\ :content, opts \\ []) do
+    elem(exist_var(file_path_or_content, var_name, type, opts), 0) == :ok
   end
 
   @doc """
@@ -159,12 +171,16 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.exist_live_socket("/path/to/file.js", var_name, :path)
   ```
   """
-  def exist_var(file_path_or_content, var_name, type \\ :content) do
+  def exist_var(file_path_or_content, var_name, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.contains_variable_from_ast_nif(file_content, var_name)
+        Native.contains_variable_from_ast_nif(
+          file_content,
+          var_name,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -257,12 +273,12 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.statistics("/path/to/file.js", :path)
   ```
   """
-  def statistics(file_path_or_content, type \\ :content) do
+  def statistics(file_path_or_content, type \\ :content, opts \\ []) do
     file_path_or_content
     |> call_nif_fn(
       __ENV__.function,
       fn file_content ->
-        Native.statistics_from_ast_nif(file_content)
+        Native.statistics_from_ast_nif(file_content, dialect_for(file_path_or_content, type, opts))
       end,
       type
     )
@@ -305,19 +321,30 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       Parser.extend_var_object_by_object_names("None", "Components", objects_names)
     ```
   """
-  def extend_var_object_by_object_names(file_path_or_content, var, object_names, type \\ :content)
+  def extend_var_object_by_object_names(
+        file_path_or_content,
+        var,
+        object_names,
+        type \\ :content,
+        opts \\ []
+      )
 
-  def extend_var_object_by_object_names(file_path_or_content, var, object_name, type)
+  def extend_var_object_by_object_names(file_path_or_content, var, object_name, type, opts)
       when is_binary(object_name) do
-    extend_var_object_by_object_names(file_path_or_content, var, [object_name], type)
+    extend_var_object_by_object_names(file_path_or_content, var, [object_name], type, opts)
   end
 
-  def extend_var_object_by_object_names(file_path_or_content, var, object_names, type) do
+  def extend_var_object_by_object_names(file_path_or_content, var, object_names, type, opts) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.extend_var_object_property_by_names_to_ast_nif(file_content, var, object_names)
+        Native.extend_var_object_property_by_names_to_ast_nif(
+          file_content,
+          var,
+          object_names,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -335,12 +362,12 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.ast_to_estree("/path/to/file.js", :path)
   ```
   """
-  def ast_to_estree(file_path_or_content, type \\ :content) do
+  def ast_to_estree(file_path_or_content, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.convert_ast_to_estree_nif(file_content)
+        Native.convert_ast_to_estree_nif(file_content, dialect_for(file_path_or_content, type, opts))
       end,
       type
     )
@@ -378,13 +405,19 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
         file_path_or_content,
         insert_code,
         index,
-        type \\ :content
+        type \\ :content,
+        opts \\ []
       ) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.insert_ast_at_index_nif(file_content, insert_code, index)
+        Native.insert_ast_at_index_nif(
+          file_content,
+          insert_code,
+          index,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -416,13 +449,19 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
         file_path_or_content,
         replace_code,
         index,
-        type \\ :content
+        type \\ :content,
+        opts \\ []
       ) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.replace_ast_at_index_nif(file_content, replace_code, index)
+        Native.replace_ast_at_index_nif(
+          file_content,
+          replace_code,
+          index,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )

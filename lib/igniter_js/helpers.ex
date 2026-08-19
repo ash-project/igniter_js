@@ -57,6 +57,58 @@ defmodule IgniterJs.Helpers do
   call_nif_fn("file content", __ENV__.function, fn content -> content end, :content)
   ```
   """
+  @doc """
+  Which dialect a source should be parsed as: `"js"`, `"jsx"`, `"ts"` or `"tsx"`.
+
+  Resolution order:
+
+    1. an explicit `:dialect` option -- `dialect: :tsx`
+    2. the file extension, when `type` is `:path`
+    3. `"js"`
+
+  Step 3 is what keeps this backward compatible. A caller passing content and saying nothing gets
+  exactly the parser configuration this library used before dialects existed, so anything that
+  parsed before parses the same way. Step 2 is new behaviour, but it can only affect files that
+  did not parse at all previously: reading `app.tsx` and parsing it as JavaScript never produced
+  an answer worth keeping.
+
+      iex> IgniterJs.Helpers.dialect_for("x.tsx", :path, [])
+      "tsx"
+
+      iex> IgniterJs.Helpers.dialect_for("const a = 1", :content, [])
+      "js"
+
+      iex> IgniterJs.Helpers.dialect_for("x.js", :path, dialect: :tsx)
+      "tsx"
+  """
+  @spec dialect_for(String.t(), :content | :path, keyword()) :: String.t()
+  def dialect_for(file_path_or_content, type, opts) do
+    case Keyword.get(opts, :dialect) do
+      nil -> if type == :path, do: dialect_of_path(file_path_or_content), else: "js"
+      dialect -> to_string(dialect)
+    end
+  end
+
+  @doc """
+  The dialect implied by a path's extension, defaulting to `"js"`.
+
+      iex> IgniterJs.Helpers.dialect_of_path("vite.config.ts")
+      "ts"
+
+      iex> IgniterJs.Helpers.dialect_of_path("Makefile")
+      "js"
+  """
+  @spec dialect_of_path(String.t()) :: String.t()
+  def dialect_of_path(path) do
+    case path |> Path.extname() |> String.downcase() do
+      ext when ext in [".ts", ".mts", ".cts"] -> "ts"
+      ".tsx" -> "tsx"
+      ".jsx" -> "jsx"
+      _ -> "js"
+    end
+  end
+
+
   def call_nif_fn(file_path, caller_function, processing_fn, type \\ :content)
 
   def call_nif_fn(file_content, caller_function, processing_fn, :content) do

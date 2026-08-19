@@ -12,6 +12,7 @@
 //!
 //! The module leverages a Rust-based parser and integrates seamlessly with Elixir through NIFs.
 
+use crate::parsers::javascript::dialect::Dialect;
 use crate::parsers::javascript::helpers::*;
 use swc_common::{SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
@@ -61,6 +62,9 @@ impl FindCondition {
 #[derive(Debug)]
 struct ASTVisitImport<'a> {
     code: &'a str,
+    /// The dialect `code` is parsed in. It is the caller's source dialect, because the imports
+    /// being added have to parse under the same rules as the file receiving them.
+    dialect: Dialect,
     duplicate_imports: Vec<String>,
     none_duplicate_imports: Vec<String>,
     operation: Operation,
@@ -74,6 +78,7 @@ impl Default for ASTVisitImport<'_> {
     fn default() -> Self {
         Self {
             code: "",
+            dialect: Dialect::Js,
             duplicate_imports: Vec::new(),
             none_duplicate_imports: Vec::new(),
             operation: Operation::Edit,
@@ -154,7 +159,7 @@ impl VisitMut for ASTVisitImport<'_> {
         }
 
         // We are using it to add imports and know it is duplicated or not
-        let imports = match parse(self.code) {
+        let imports = match parse_as(self.code, self.dialect) {
             Ok((imports, _comments, _cm)) => imports,
             Err(_) => {
                 self.parse_error = Some(INVALID_ARGUMENT_MESSAGE.to_string());
@@ -211,14 +216,19 @@ impl VisitMut for ASTVisitImport<'_> {
 /// # Returns
 /// A `Result` containing `true` if the module is imported, `false` otherwise,
 /// or an error message if parsing fails.
-pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Result<bool, bool> {
+pub fn is_module_imported_from_ast(
+    file_content: &str,
+    module_name: &str,
+    dialect: Dialect,
+) -> Result<bool, bool> {
     let mut import_visitor = ASTVisitImport {
+        dialect,
         code: module_name,
         operation: Operation::Read,
         ..Default::default()
     };
 
-    let _output = code_gen_from_ast_vist(file_content, &mut import_visitor);
+    let _output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect);
 
     if import_visitor.parse_error.is_some() {
         return Err(false);
@@ -252,14 +262,19 @@ pub fn is_module_imported_from_ast(file_content: &str, module_name: &str) -> Res
 /// # Behavior
 /// - Ensures duplicate imports are skipped.
 /// - Inserts new import statements after existing ones or at the top if none exist.
-pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<String, String> {
+pub fn insert_import_to_ast(
+    file_content: &str,
+    import_lines: &str,
+    dialect: Dialect,
+) -> Result<String, String> {
     let mut import_visitor = ASTVisitImport {
+        dialect,
         code: import_lines,
         operation: Operation::Add,
         ..Default::default()
     };
 
-    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+    let output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect)?;
 
     match import_visitor.parse_error {
         Some(error) => Err(error),
@@ -288,14 +303,19 @@ pub fn insert_import_to_ast(file_content: &str, import_lines: &str) -> Result<St
 /// # Behavior
 /// - Retains all other import statements and code structure.
 /// - Removes only the specified modules from the import declarations.
-pub fn remove_import_from_ast(file_content: &str, modules: &str) -> Result<String, String> {
+pub fn remove_import_from_ast(
+    file_content: &str,
+    modules: &str,
+    dialect: Dialect,
+) -> Result<String, String> {
     let mut import_visitor = ASTVisitImport {
+        dialect,
         code: modules,
         operation: Operation::Delete,
         ..Default::default()
     };
 
-    let output = code_gen_from_ast_vist(file_content, &mut import_visitor)?;
+    let output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect)?;
 
     match import_visitor.parse_error {
         Some(error) => Err(error),
@@ -388,13 +408,13 @@ impl VisitMut for ASTStatistics {
 /// let result = statistics_from_ast(file_content);
 /// assert!(result.is_ok());
 /// ```
-pub fn statistics_from_ast(file_content: &str) -> Result<ASTStatistics, String> {
+pub fn statistics_from_ast(file_content: &str, dialect: Dialect) -> Result<ASTStatistics, String> {
     let mut import_visitor = ASTStatistics {
         operation: Operation::Read,
         ..Default::default()
     };
 
-    let _ = code_gen_from_ast_vist(file_content, &mut import_visitor);
+    let _ = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect);
 
     Ok(import_visitor)
 }
@@ -514,6 +534,7 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
     file_content: &str,
     var_name: &str,
     object_names: impl IntoIterator<Item = &'a str> + Clone,
+    dialect: Dialect,
 ) -> Result<String, String> {
     let new_properties: Vec<Prop> = object_names
         .into_iter()
@@ -527,7 +548,7 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
         ..Default::default()
     };
 
-    let result = code_gen_from_ast_vist(file_content, &mut object_extender);
+    let result = code_gen_from_ast_vist_as(file_content, &mut object_extender, dialect);
     if object_extender.find == FindCondition::Found {
         result
     } else {
@@ -561,20 +582,22 @@ pub fn extend_var_object_property_by_names_to_ast<'a>(
 /// let result = contains_variable_from_ast(js_code, "anotherVar");
 /// assert_eq!(result, Err(false));
 /// ```
-pub fn contains_variable_from_ast(file_content: &str, variable_name: &str) -> Result<bool, bool> {
-    let (module, _, _) = match parse(file_content) {
+pub fn contains_variable_from_ast(
+    file_content: &str,
+    variable_name: &str,
+    dialect: Dialect,
+) -> Result<bool, bool> {
+    let (module, _, _) = match parse_as(file_content, dialect) {
         Ok(result) => result,
         Err(_) => return Err(false),
     };
 
     for item in &module.body {
         if let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var_decl))) = item {
-            if var_decl.kind == VarDeclKind::Let {
-                for decl in &var_decl.decls {
-                    if let Pat::Ident(BindingIdent { id, .. }) = &decl.name {
-                        if id.sym == variable_name {
-                            return Ok(true);
-                        }
+            for decl in &var_decl.decls {
+                if let Pat::Ident(BindingIdent { id, .. }) = &decl.name {
+                    if id.sym == variable_name {
+                        return Ok(true);
                     }
                 }
             }
@@ -621,9 +644,10 @@ pub fn insert_ast_at_index(
     file_content: &str,
     insert_code: &str,
     index: usize,
+    dialect: Dialect,
 ) -> Result<String, String> {
-    let (mut module, comments, cm) = parse(file_content)?;
-    let (insert_module, _, _) = parse(insert_code)?;
+    let (mut module, comments, cm) = parse_as(file_content, dialect)?;
+    let (insert_module, _, _) = parse_as(insert_code, dialect)?;
 
     if index > module.body.len() {
         return Err("Index out of bounds".to_string());
@@ -631,7 +655,7 @@ pub fn insert_ast_at_index(
 
     module.body.splice(index..index, insert_module.body);
 
-    Ok(code_gen_from_ast_module(&mut module, comments, cm))
+    code_gen_from_ast_module(&mut module, comments, cm)
 }
 
 /// Replaces the AST node at a specified index with a new JavaScript AST.
@@ -667,9 +691,10 @@ pub fn replace_ast_at_index(
     file_content: &str,
     replace_code: &str,
     index: usize,
+    dialect: Dialect,
 ) -> Result<String, String> {
-    let (mut module, comments, cm) = parse(file_content)?;
-    let (replace_module, _, _) = parse(replace_code)?;
+    let (mut module, comments, cm) = parse_as(file_content, dialect)?;
+    let (replace_module, _, _) = parse_as(replace_code, dialect)?;
 
     if index >= module.body.len() {
         return Err("Index out of bounds".to_string());
@@ -681,7 +706,7 @@ pub fn replace_ast_at_index(
 
     module.body.splice(index..=index, replace_module.body);
 
-    Ok(code_gen_from_ast_module(&mut module, comments, cm))
+    code_gen_from_ast_module(&mut module, comments, cm)
 }
 
 #[cfg(test)]
@@ -697,14 +722,14 @@ mod tests {
         let code = "import topbar from \"../vendor/topbar\";\nlet Hooks = {};\n";
         let invalid = "../vendor/topbar";
 
-        let result = insert_import_to_ast(code, invalid);
+        let result = insert_import_to_ast(code, invalid, Dialect::Js);
         assert!(
             result.is_err(),
             "insert_import_to_ast should error, got {:?}",
             result
         );
 
-        let result = is_module_imported_from_ast(code, invalid);
+        let result = is_module_imported_from_ast(code, invalid, Dialect::Js);
         assert_eq!(
             result,
             Err(false),
@@ -718,8 +743,8 @@ mod tests {
     fn test_unparseable_source_returns_error_instead_of_panicking() {
         let broken = "let x = ;;; import * from;";
 
-        assert_eq!(contains_variable_from_ast(broken, "x"), Err(false));
-        assert!(remove_import_from_ast(broken, "topbar").is_err());
+        assert_eq!(contains_variable_from_ast(broken, "x", Dialect::Js), Err(false));
+        assert!(remove_import_from_ast(broken, "topbar", Dialect::Js).is_err());
     }
 
     const TWO_IMPORTS: &str =
@@ -727,7 +752,7 @@ mod tests {
 
     #[test]
     fn test_remove_import_by_bare_module_specifier() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "../vendor/topbar").unwrap();
+        let result = remove_import_from_ast(TWO_IMPORTS, "../vendor/topbar", Dialect::Js).unwrap();
 
         assert!(!result.contains("topbar"), "got: {result}");
         assert!(result.contains("phoenix"), "got: {result}");
@@ -737,8 +762,12 @@ mod tests {
     #[test]
     fn test_remove_import_by_full_statement_still_works() {
         let result =
-            remove_import_from_ast(TWO_IMPORTS, "import topbar from \"../vendor/topbar\";")
-                .unwrap();
+            remove_import_from_ast(
+                TWO_IMPORTS,
+                "import topbar from \"../vendor/topbar\";",
+                Dialect::Js,
+            )
+            .unwrap();
 
         assert!(!result.contains("topbar"), "got: {result}");
         assert!(result.contains("phoenix"), "got: {result}");
@@ -746,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_remove_several_bare_specifiers_one_per_line() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "phoenix\n../vendor/topbar").unwrap();
+        let result = remove_import_from_ast(TWO_IMPORTS, "phoenix\n../vendor/topbar", Dialect::Js).unwrap();
 
         assert!(!result.contains("topbar"), "got: {result}");
         assert!(!result.contains("phoenix"), "got: {result}");
@@ -760,7 +789,7 @@ mod tests {
         let code = "import x from \"foo\";\nimport { foo } from \"module-name\";\n";
         let argument = "import {\n  foo\n} from \"module-name\";";
 
-        let result = remove_import_from_ast(code, argument).unwrap();
+        let result = remove_import_from_ast(code, argument, Dialect::Js).unwrap();
 
         assert!(result.contains("import x from \"foo\";"), "got: {result}");
         assert!(!result.contains("module-name"), "got: {result}");
@@ -770,21 +799,21 @@ mod tests {
     /// removal key.
     #[test]
     fn test_remove_import_does_not_match_local_binding_name() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "topbar").unwrap();
+        let result = remove_import_from_ast(TWO_IMPORTS, "topbar", Dialect::Js).unwrap();
 
         assert!(result.contains("../vendor/topbar"), "got: {result}");
     }
 
     #[test]
     fn test_remove_import_of_an_absent_module_is_a_no_op() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "not-imported").unwrap();
+        let result = remove_import_from_ast(TWO_IMPORTS, "not-imported", Dialect::Js).unwrap();
 
         assert_eq!(result.trim(), TWO_IMPORTS.trim());
     }
 
     #[test]
     fn test_remove_import_with_a_blank_argument_is_a_no_op() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "   ").unwrap();
+        let result = remove_import_from_ast(TWO_IMPORTS, "   ", Dialect::Js).unwrap();
 
         assert_eq!(result.trim(), TWO_IMPORTS.trim());
     }
@@ -807,14 +836,14 @@ mod tests {
                 import { Socket, SocketV1 } from "phoenix";
                 import { TS } from "tsobject";
             "#;
-        let result = is_module_imported_from_ast(code, import);
+        let result = is_module_imported_from_ast(code, import, Dialect::Js);
 
         assert!(result.is_ok(), "Expected Ok(true), but got {:?}", result);
 
         let import = r#"
                 import { NoneRepeated } from "orepeat";
             "#;
-        let result = is_module_imported_from_ast(code, import);
+        let result = is_module_imported_from_ast(code, import, Dialect::Js);
         assert!(result.is_err(), "Expected Ok(true), but got {:?}", result);
 
         let import = r#"
@@ -822,7 +851,7 @@ mod tests {
                 import { NoneRepeated } from "orepeat";
                 import { TS } from "tsobject";
             "#;
-        let result = is_module_imported_from_ast(code, import);
+        let result = is_module_imported_from_ast(code, import, Dialect::Js);
 
         assert!(result.is_err(), "Expected Ok(true), but got {:?}", result);
     }
@@ -847,7 +876,7 @@ mod tests {
                 import { NoneRepeated } from "orepeat";
                 import ScrollArea from "./scrollArea.js";
             "#;
-        let result = insert_import_to_ast(code, import).expect("Failed to generate code");
+        let result = insert_import_to_ast(code, import, Dialect::Js).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
@@ -884,7 +913,7 @@ mod tests {
                 import { NoneRepeated } from "orepeat";
                 import { NoneRepeated1 } from "orepeat1";
             "#;
-        let result = remove_import_from_ast(code, import).expect("Failed to generate code");
+        let result = remove_import_from_ast(code, import, Dialect::Js).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(!result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
@@ -896,7 +925,7 @@ mod tests {
         let Hooks = {};
         "#;
 
-        let result = remove_import_from_ast(code, "import bar from \"another-module\";")
+        let result = remove_import_from_ast(code, "import bar from \"another-module\";", Dialect::Js)
             .expect("Failed to generate code");
 
         println!("{}", result);
@@ -919,7 +948,7 @@ mod tests {
                 debugger;
             }
         "#;
-        let parsed = statistics_from_ast(code).unwrap();
+        let parsed = statistics_from_ast(code, Dialect::Js).unwrap();
         assert_eq!(parsed.functions, 1);
         assert_eq!(parsed.classes, 1);
         assert_eq!(parsed.debuggers, 2);
@@ -950,12 +979,12 @@ mod tests {
         vec_of_strs.sort();
 
         let result =
-            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone());
+            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone(), Dialect::Js);
         assert!(result.is_ok());
         println!("{}", result.unwrap());
 
         let result =
-            extend_var_object_property_by_names_to_ast(code, "NoneComponent", vec_of_strs.clone());
+            extend_var_object_property_by_names_to_ast(code, "NoneComponent", vec_of_strs.clone(), Dialect::Js);
         assert!(result.is_err());
 
         let code = r#"
@@ -966,7 +995,7 @@ mod tests {
             "#;
 
         let result =
-            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone());
+            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone(), Dialect::Js);
         assert!(result.is_err());
 
         let code = r#"
@@ -981,7 +1010,7 @@ mod tests {
 
         let object_names = ["ScrollArea", "NoneComponent"];
 
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names, Dialect::Js);
         assert!(result.is_ok());
 
         let code = r#"
@@ -993,7 +1022,7 @@ mod tests {
             "#;
 
         let object_names = ["ScrollArea", "NoneComponent", "...NoneComponent"];
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names);
+        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names, Dialect::Js);
 
         assert!(result.is_ok());
     }
@@ -1008,7 +1037,7 @@ mod tests {
             });
             "#;
 
-        let result = contains_variable_from_ast(code, "liveSocket");
+        let result = contains_variable_from_ast(code, "liveSocket", Dialect::Js);
 
         println!("{:#?}", result.unwrap())
     }
@@ -1021,7 +1050,7 @@ mod tests {
             let file_content = "function a() {} function b() {}";
             let insert_code = "function newFunc() {}";
 
-            let result = insert_ast_at_index(file_content, insert_code, 1);
+            let result = insert_ast_at_index(file_content, insert_code, 1, Dialect::Js);
 
             assert!(result.is_ok());
             let updated_ast = result.unwrap();
@@ -1051,7 +1080,7 @@ mod tests {
                 }
             "#;
 
-            let result = insert_ast_at_index(code, insert_code, 0);
+            let result = insert_ast_at_index(code, insert_code, 0, Dialect::Js);
 
             assert!(result.is_ok());
 
@@ -1064,7 +1093,7 @@ mod tests {
             let file_content = "function a() {}";
             let insert_code = "function newFunc() {}";
 
-            let result = insert_ast_at_index(file_content, insert_code, 5);
+            let result = insert_ast_at_index(file_content, insert_code, 5, Dialect::Js);
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Index out of bounds");
@@ -1080,7 +1109,7 @@ mod tests {
             "#;
             let insert_code = "function newFunc() {}";
 
-            let result = insert_ast_at_index(file_content, insert_code, 3);
+            let result = insert_ast_at_index(file_content, insert_code, 3, Dialect::Js);
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Index out of bounds");
@@ -1091,7 +1120,7 @@ mod tests {
             let file_content = "function a() {} function b() {}";
             let insert_code = "function newFunc() {}";
 
-            let result = replace_ast_at_index(file_content, insert_code, 0);
+            let result = replace_ast_at_index(file_content, insert_code, 0, Dialect::Js);
 
             assert!(result.is_ok());
             let updated_ast = result.unwrap();
@@ -1121,7 +1150,7 @@ mod tests {
                 }
             "#;
 
-            let result = replace_ast_at_index(code, insert_code, 2);
+            let result = replace_ast_at_index(code, insert_code, 2, Dialect::Js);
 
             assert!(result.is_ok());
 
@@ -1134,7 +1163,7 @@ mod tests {
             let file_content = "function a() {}";
             let insert_code = "function newFunc() {}";
 
-            let result = replace_ast_at_index(file_content, insert_code, 5);
+            let result = replace_ast_at_index(file_content, insert_code, 5, Dialect::Js);
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Index out of bounds");

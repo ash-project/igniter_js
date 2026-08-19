@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 pub mod ast;
+pub mod dialect;
 pub mod ast_ex;
 pub mod ast_json;
 pub mod formatter;

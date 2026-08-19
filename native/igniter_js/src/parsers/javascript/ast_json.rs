@@ -7,7 +7,7 @@ use oxc_allocator::Allocator;
 use oxc_ast_visit::utf8_to_utf16::Utf8ToUtf16;
 use oxc_diagnostics::Severity;
 use oxc_parser::{ParseOptions, Parser};
-use oxc_span::SourceType;
+use super::dialect::Dialect;
 use serde_json::json;
 
 /// Converts JavaScript AST to the ESTree format.
@@ -48,7 +48,15 @@ use serde_json::json;
 /// assert!(json_output.contains("\"comments\""));
 /// ```
 pub fn convert_ast_to_estree(source_text: &str) -> Result<String, String> {
-    let source_type = SourceType::from_path("example.js").expect("Invalid file extension");
+    convert_ast_to_estree_as(source_text, Dialect::Js)
+}
+
+/// As [`convert_ast_to_estree`], in a given dialect.
+///
+/// The source type used to be `SourceType::from_path("example.js")` with an `.expect()` on it —
+/// a hardcoded dialect *and* a panic path, in one line, for a filename that was never real.
+pub fn convert_ast_to_estree_as(source_text: &str, dialect: Dialect) -> Result<String, String> {
+    let source_type = dialect.oxc_source_type();
     let allocator = Allocator::default();
     let parser_return = Parser::new(&allocator, source_text, source_type)
         .with_options(ParseOptions {

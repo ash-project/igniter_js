@@ -14,23 +14,41 @@ use swc_common::{
     FileName, SourceMap,
 };
 
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput};
 
+use super::dialect::Dialect;
+
+/// Parse `file_content` as plain JavaScript.
+///
+/// Kept for callers that predate dialects and for the many places inside this crate where the
+/// source is a fragment we generated ourselves. Everything reachable from a NIF should call
+/// [`parse_as`] and pass the dialect through.
 pub fn parse(
     file_content: &str,
+) -> Result<(Module, SingleThreadedComments, Lrc<SourceMap>), String> {
+    parse_as(file_content, Dialect::Js)
+}
+
+/// Parse `file_content` in `dialect`.
+///
+/// The dialect decides both the swc syntax configuration and the filename swc reports in
+/// diagnostics, so a TypeScript error no longer claims to come from `virtual_file.js`.
+pub fn parse_as(
+    file_content: &str,
+    dialect: Dialect,
 ) -> Result<(Module, SingleThreadedComments, Lrc<SourceMap>), String> {
     let cm: Lrc<SourceMap> = Default::default();
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
     let fm = cm.new_source_file(
-        FileName::Custom("virtual_file.js".into()).into(),
+        FileName::Custom(dialect.virtual_file_name().into()).into(),
         file_content.to_string(),
     );
 
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
-        Syntax::Es(Default::default()),
+        dialect.swc_syntax(),
         Default::default(),
         StringInput::from(&*fm),
         Some(&comments),
@@ -53,11 +71,23 @@ pub fn parse(
     Ok((module, comments, cm))
 }
 
-pub fn code_gen_from_ast_vist<T>(file_content: &str, mut visitor: T) -> Result<String, String>
+pub fn code_gen_from_ast_vist<T>(file_content: &str, visitor: T) -> Result<String, String>
 where
     T: VisitMut,
 {
-    let (mut module, comments, cm) = match parse(file_content) {
+    code_gen_from_ast_vist_as(file_content, visitor, Dialect::Js)
+}
+
+/// As [`code_gen_from_ast_vist`], in a given dialect.
+pub fn code_gen_from_ast_vist_as<T>(
+    file_content: &str,
+    mut visitor: T,
+    dialect: Dialect,
+) -> Result<String, String>
+where
+    T: VisitMut,
+{
+    let (mut module, comments, cm) = match parse_as(file_content, dialect) {
         Ok(result) => result,
         Err(_) => return Err("Failed to parse JavaScript content".to_string()),
     };
@@ -79,11 +109,17 @@ where
     String::from_utf8(buf).map_err(|_| "Invalid UTF-8".to_string())
 }
 
+/// Emit source for a module that has already been parsed and modified.
+///
+/// Returns a `Result`. It used to `.expect()` on both the emit and the UTF-8 conversion, which
+/// panics the NIF — and a panic in a NIF takes down the calling BEAM process with a message about
+/// Rust rather than an `{:error, _}` the caller can act on. Neither failure is impossible: a
+/// visitor can build a module swc declines to print.
 pub fn code_gen_from_ast_module(
     module: &mut Module,
     comments: SingleThreadedComments,
     cm: Lrc<SourceMap>,
-) -> String {
+) -> Result<String, String> {
     let mut buf = vec![];
 
     let mut emitter = Emitter {
@@ -93,8 +129,11 @@ pub fn code_gen_from_ast_module(
         wr: JsWriter::new(cm.clone(), "\n", &mut buf, None),
     };
 
-    emitter.emit_module(module).expect("Failed to emit module");
-    String::from_utf8(buf).expect("Invalid UTF-8")
+    emitter
+        .emit_module(module)
+        .map_err(|_| "Failed to emit module".to_string())?;
+
+    String::from_utf8(buf).map_err(|_| "Invalid UTF-8 in generated source".to_string())
 }
 
 pub fn is_duplicate_import(new_import: &ModuleItem, body: &[ModuleItem]) -> bool {
