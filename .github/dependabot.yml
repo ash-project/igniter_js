@@ -3,18 +3,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-version: 2
+---
 updates:
-  - package-ecosystem: mix
-    versioning-strategy: lockfile-only
-    directory: "/"
-    ignore:
-      - dependency-name: "rustler"
-    schedule:
-      interval: weekly
-      day: thursday
+  - directory: /
     groups:
-      production-dependencies:
-        dependency-type: production
-      dev-dependencies:
-        dependency-type: development
+      all-dependencies:
+        patterns:
+          - '*'
+    ignore:
+      - dependency-name: rustler
+    package-ecosystem: mix
+    schedule:
+      interval: monthly
+    versioning-strategy: lockfile-only
+version: 2
