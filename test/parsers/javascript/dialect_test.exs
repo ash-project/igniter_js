@@ -105,16 +105,22 @@ defmodule IgniterJSTest.Parsers.Javascript.DialectTest do
 
   describe "JSX and TSX" do
     test "a React component parses as jsx" do
-      assert Parser.module_imported?(@jsx, ~s|import React from "react";|, :content, dialect: :jsx)
+      assert Parser.module_imported?(@jsx, ~s|import React from "react";|, :content,
+               dialect: :jsx
+             )
     end
 
     test "a TypeScript React component parses as tsx" do
-      assert Parser.module_imported?(@tsx, ~s|import { RskApp } from "@rsk/router";|, :content, dialect: :tsx)
+      assert Parser.module_imported?(@tsx, ~s|import { RskApp } from "@rsk/router";|, :content,
+               dialect: :tsx
+             )
     end
 
     test "an import can be inserted into a component that returns JSX" do
       assert {:ok, _, out} =
-               Parser.insert_imports(@tsx, ~s|import { rsk } from "./rsk"|, :content, dialect: :tsx)
+               Parser.insert_imports(@tsx, ~s|import { rsk } from "./rsk"|, :content,
+                 dialect: :tsx
+               )
 
       assert out =~ ~s|from "./rsk"|
       assert out =~ "<RskApp>", "the JSX must survive the round trip"
@@ -155,7 +161,11 @@ defmodule IgniterJSTest.Parsers.Javascript.DialectTest do
     test "every dialect-aware function still works with its original arity" do
       assert {:ok, _, _} = Formatter.format("const x=1")
       assert is_boolean(Formatter.is_formatted?("const x = 1;\n"))
-      assert is_boolean(Parser.module_imported?(~s|import { a } from "m";|, ~s|import { a } from "m";|))
+
+      assert is_boolean(
+               Parser.module_imported?(~s|import { a } from "m";|, ~s|import { a } from "m";|)
+             )
+
       assert is_boolean(Parser.var_exists?("let a = 1", "a"))
       assert {:ok, _, _} = Parser.statistics("const a = 1")
     end

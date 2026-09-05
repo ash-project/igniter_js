@@ -278,7 +278,10 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
     |> call_nif_fn(
       __ENV__.function,
       fn file_content ->
-        Native.statistics_from_ast_nif(file_content, dialect_for(file_path_or_content, type, opts))
+        Native.statistics_from_ast_nif(
+          file_content,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
@@ -367,7 +370,10 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.convert_ast_to_estree_nif(file_content, dialect_for(file_path_or_content, type, opts))
+        Native.convert_ast_to_estree_nif(
+          file_content,
+          dialect_for(file_path_or_content, type, opts)
+        )
       end,
       type
     )
