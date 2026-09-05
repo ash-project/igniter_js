@@ -57,6 +57,26 @@ defmodule IgniterJs.Helpers do
   call_nif_fn("file content", __ENV__.function, fn content -> content end, :content)
   ```
   """
+
+  def call_nif_fn(file_path, caller_function, processing_fn, type \\ :content)
+
+  def call_nif_fn(file_content, caller_function, processing_fn, :content) do
+    processing_fn.(file_content)
+    |> normalize_output(caller_function)
+  end
+
+  def call_nif_fn(file_path, caller_function, processing_fn, :path) do
+    case read_and_validate_file(file_path) do
+      {:ok, file_content} ->
+        processing_fn.(file_content)
+        |> normalize_output(caller_function)
+
+      reason ->
+        Tuple.insert_at(reason, 1, :none)
+        |> normalize_output(caller_function)
+    end
+  end
+
   @doc """
   Which dialect a source should be parsed as: `"js"`, `"jsx"`, `"ts"` or `"tsx"`.
 
@@ -105,26 +125,6 @@ defmodule IgniterJs.Helpers do
       ".tsx" -> "tsx"
       ".jsx" -> "jsx"
       _ -> "js"
-    end
-  end
-
-
-  def call_nif_fn(file_path, caller_function, processing_fn, type \\ :content)
-
-  def call_nif_fn(file_content, caller_function, processing_fn, :content) do
-    processing_fn.(file_content)
-    |> normalize_output(caller_function)
-  end
-
-  def call_nif_fn(file_path, caller_function, processing_fn, :path) do
-    case read_and_validate_file(file_path) do
-      {:ok, file_content} ->
-        processing_fn.(file_content)
-        |> normalize_output(caller_function)
-
-      reason ->
-        Tuple.insert_at(reason, 1, :none)
-        |> normalize_output(caller_function)
     end
   end
 end
