@@ -321,7 +321,7 @@ pub fn remove_objects_of_hooks_from_ast(
         }
     }
 
-    let result = code_gen_from_ast_module(&mut module, comments, cm);
+    let result = code_gen_from_ast_module(&mut module, comments, cm)?;
     if hook_extender.find == FindCondition::Found {
         Ok(result)
     } else {

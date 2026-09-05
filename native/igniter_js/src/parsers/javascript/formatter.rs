@@ -3,11 +3,11 @@
 //
 // SPDX-License-Identifier: MIT
 
+use super::dialect::Dialect;
 use biome_formatter::{IndentStyle, IndentWidth};
 use biome_js_formatter::context::JsFormatOptions;
 use biome_js_formatter::format_node;
 use biome_js_parser::{parse, JsParserOptions};
-use biome_js_syntax::{JsFileSource, ModuleKind};
 
 /// Formats JavaScript source code using a standardized formatting style.
 ///
@@ -37,9 +37,14 @@ use biome_js_syntax::{JsFileSource, ModuleKind};
 /// assert!(formatted_code.contains("console.log('Hello, world!');"));
 /// ```
 pub fn format(source_code: &str) -> Result<String, String> {
+    format_as(source_code, Dialect::Js)
+}
+
+/// As [`format`], in a given dialect.
+pub fn format_as(source_code: &str, dialect: Dialect) -> Result<String, String> {
     let parsed = parse(
         source_code,
-        JsFileSource::default().with_module_kind(ModuleKind::Module),
+        dialect.biome_source(),
         JsParserOptions::default(),
     );
 
@@ -47,10 +52,9 @@ pub fn format(source_code: &str) -> Result<String, String> {
         return Err("Parsing failed due to syntax errors.".into());
     }
 
-    let options =
-        JsFormatOptions::new(JsFileSource::default().with_module_kind(ModuleKind::Module))
-            .with_indent_style(IndentStyle::Space)
-            .with_indent_width(IndentWidth::default());
+    let options = JsFormatOptions::new(dialect.biome_source())
+        .with_indent_style(IndentStyle::Space)
+        .with_indent_width(IndentWidth::default());
 
     let result = format_node(options, &parsed.syntax())
         .map_err(|err| format!("Formatting failed: {}", err))?;
@@ -88,7 +92,12 @@ pub fn format(source_code: &str) -> Result<String, String> {
 /// assert_eq!(result, Ok(false));
 /// ```
 pub fn is_formatted(source_code: &str) -> Result<bool, String> {
-    let formatted_code = format(source_code)?;
+    is_formatted_as(source_code, Dialect::Js)
+}
+
+/// As [`is_formatted`], in a given dialect.
+pub fn is_formatted_as(source_code: &str, dialect: Dialect) -> Result<bool, String> {
+    let formatted_code = format_as(source_code, dialect)?;
     Ok(formatted_code.trim() == source_code.trim())
 }
 

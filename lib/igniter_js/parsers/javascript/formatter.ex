@@ -11,7 +11,7 @@ defmodule IgniterJs.Parsers.Javascript.Formatter do
   """
 
   alias IgniterJs.Native
-  import IgniterJs.Helpers, only: [call_nif_fn: 4]
+  import IgniterJs.Helpers, only: [call_nif_fn: 4, dialect_for: 3]
 
   @doc """
   Checks if the provided JavaScript content or file is formatted.
@@ -30,8 +30,8 @@ defmodule IgniterJs.Parsers.Javascript.Formatter do
       true
 
   """
-  def is_formatted?(file_path_or_content, type \\ :content) do
-    elem(is_formatted(file_path_or_content, type), 0) == :ok
+  def is_formatted?(file_path_or_content, type \\ :content, opts \\ []) do
+    elem(is_formatted(file_path_or_content, type, opts), 0) == :ok
   end
 
   @doc """
@@ -50,23 +50,23 @@ defmodule IgniterJs.Parsers.Javascript.Formatter do
       {:ok, :is_formatted, true}
 
   """
-  def is_formatted(file_path_or_content, type \\ :content) do
+  def is_formatted(file_path_or_content, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.is_js_formatted_nif(file_content)
+        Native.is_js_formatted_nif(file_content, dialect_for(file_path_or_content, type, opts))
       end,
       type
     )
   end
 
-  def format(file_path_or_content, type \\ :content) do
+  def format(file_path_or_content, type \\ :content, opts \\ []) do
     call_nif_fn(
       file_path_or_content,
       __ENV__.function,
       fn file_content ->
-        Native.format_js_nif(file_content)
+        Native.format_js_nif(file_content, dialect_for(file_path_or_content, type, opts))
       end,
       type
     )

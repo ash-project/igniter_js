@@ -33,36 +33,41 @@ defmodule IgniterJs.Native do
         System.get_env("ASH_CI_BUILD") in ["1", "true"]
 
   # When your NIF is loaded, it will override this function.
-  def is_module_imported_from_ast_nif(_file_content, _module_name), do: error()
+  def is_module_imported_from_ast_nif(_file_content, _module_name, _dialect), do: error()
 
-  def insert_import_to_ast_nif(_file_content, _import_lines), do: error()
+  def insert_import_to_ast_nif(_file_content, _import_lines, _dialect), do: error()
 
-  def remove_import_from_ast_nif(_file_content, _modules), do: error()
+  def remove_import_from_ast_nif(_file_content, _modules, _dialect), do: error()
 
   def find_live_socket_node_from_ast_nif(_file_content), do: error()
 
-  def contains_variable_from_ast_nif(_file_content, _variable_name), do: error()
+  def contains_variable_from_ast_nif(_file_content, _variable_name, _dialect), do: error()
 
   def extend_hook_object_to_ast_nif(_file_content, _names), do: error()
 
   def remove_objects_of_hooks_from_ast_nif(_file_content, _object_names), do: error()
 
-  def statistics_from_ast_nif(_file_content), do: error()
+  def statistics_from_ast_nif(_file_content, _dialect), do: error()
 
-  def extend_var_object_property_by_names_to_ast_nif(_file_content, _var_name, _object_names),
-    do: error()
+  def extend_var_object_property_by_names_to_ast_nif(
+        _file_content,
+        _var_name,
+        _object_names,
+        _dialect
+      ),
+      do: error()
 
-  def format_js_nif(_file_content), do: error()
+  def format_js_nif(_file_content, _dialect), do: error()
 
-  def is_js_formatted_nif(_file_content), do: error()
+  def is_js_formatted_nif(_file_content, _dialect), do: error()
 
   def format_css_nif(_file_content), do: error()
 
-  def convert_ast_to_estree_nif(_file_content), do: error()
+  def convert_ast_to_estree_nif(_file_content, _dialect), do: error()
 
-  def insert_ast_at_index_nif(_file_content, _insert_code, _index), do: error()
+  def insert_ast_at_index_nif(_file_content, _insert_code, _index, _dialect), do: error()
 
-  def replace_ast_at_index_nif(_file_content, _replace_code, _index), do: error()
+  def replace_ast_at_index_nif(_file_content, _replace_code, _index, _dialect), do: error()
 
   def is_css_formatted_nif(_file_content), do: error()
 
