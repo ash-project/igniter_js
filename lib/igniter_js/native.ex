@@ -49,8 +49,13 @@ defmodule IgniterJs.Native do
 
   def statistics_from_ast_nif(_file_content, _dialect), do: error()
 
-  def extend_var_object_property_by_names_to_ast_nif(_file_content, _var_name, _object_names, _dialect),
-    do: error()
+  def extend_var_object_property_by_names_to_ast_nif(
+        _file_content,
+        _var_name,
+        _object_names,
+        _dialect
+      ),
+      do: error()
 
   def format_js_nif(_file_content, _dialect), do: error()
 
