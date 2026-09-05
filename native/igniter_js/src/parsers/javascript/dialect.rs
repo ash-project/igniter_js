@@ -49,7 +49,12 @@ impl Dialect {
     /// dot. Anything else is an error rather than a silent fallback: guessing on a name we do not
     /// recognise is how a `.mts` file would quietly get parsed as plain JS and fail confusingly.
     pub fn from_name(name: &str) -> Result<Self, String> {
-        match name.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+        match name
+            .trim()
+            .trim_start_matches('.')
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "js" | "mjs" | "cjs" => Ok(Dialect::Js),
             "jsx" => Ok(Dialect::Jsx),
             "ts" | "mts" | "cts" => Ok(Dialect::Ts),

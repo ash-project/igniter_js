@@ -743,7 +743,10 @@ mod tests {
     fn test_unparseable_source_returns_error_instead_of_panicking() {
         let broken = "let x = ;;; import * from;";
 
-        assert_eq!(contains_variable_from_ast(broken, "x", Dialect::Js), Err(false));
+        assert_eq!(
+            contains_variable_from_ast(broken, "x", Dialect::Js),
+            Err(false)
+        );
         assert!(remove_import_from_ast(broken, "topbar", Dialect::Js).is_err());
     }
 
@@ -761,13 +764,12 @@ mod tests {
 
     #[test]
     fn test_remove_import_by_full_statement_still_works() {
-        let result =
-            remove_import_from_ast(
-                TWO_IMPORTS,
-                "import topbar from \"../vendor/topbar\";",
-                Dialect::Js,
-            )
-            .unwrap();
+        let result = remove_import_from_ast(
+            TWO_IMPORTS,
+            "import topbar from \"../vendor/topbar\";",
+            Dialect::Js,
+        )
+        .unwrap();
 
         assert!(!result.contains("topbar"), "got: {result}");
         assert!(result.contains("phoenix"), "got: {result}");
@@ -775,7 +777,8 @@ mod tests {
 
     #[test]
     fn test_remove_several_bare_specifiers_one_per_line() {
-        let result = remove_import_from_ast(TWO_IMPORTS, "phoenix\n../vendor/topbar", Dialect::Js).unwrap();
+        let result =
+            remove_import_from_ast(TWO_IMPORTS, "phoenix\n../vendor/topbar", Dialect::Js).unwrap();
 
         assert!(!result.contains("topbar"), "got: {result}");
         assert!(!result.contains("phoenix"), "got: {result}");
@@ -876,7 +879,8 @@ mod tests {
                 import { NoneRepeated } from "orepeat";
                 import ScrollArea from "./scrollArea.js";
             "#;
-        let result = insert_import_to_ast(code, import, Dialect::Js).expect("Failed to generate code");
+        let result =
+            insert_import_to_ast(code, import, Dialect::Js).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
@@ -913,7 +917,8 @@ mod tests {
                 import { NoneRepeated } from "orepeat";
                 import { NoneRepeated1 } from "orepeat1";
             "#;
-        let result = remove_import_from_ast(code, import, Dialect::Js).expect("Failed to generate code");
+        let result =
+            remove_import_from_ast(code, import, Dialect::Js).expect("Failed to generate code");
 
         assert!(result.contains("import \"phoenix_html\";"));
         assert!(!result.contains("import { Socket, SocketV1 } from \"phoenix\";"));
@@ -925,8 +930,9 @@ mod tests {
         let Hooks = {};
         "#;
 
-        let result = remove_import_from_ast(code, "import bar from \"another-module\";", Dialect::Js)
-            .expect("Failed to generate code");
+        let result =
+            remove_import_from_ast(code, "import bar from \"another-module\";", Dialect::Js)
+                .expect("Failed to generate code");
 
         println!("{}", result);
     }
@@ -978,13 +984,21 @@ mod tests {
         let mut vec_of_strs: Vec<&str> = unique_names.iter().map(|s| s.as_str()).collect();
         vec_of_strs.sort();
 
-        let result =
-            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone(), Dialect::Js);
+        let result = extend_var_object_property_by_names_to_ast(
+            code,
+            "Components",
+            vec_of_strs.clone(),
+            Dialect::Js,
+        );
         assert!(result.is_ok());
         println!("{}", result.unwrap());
 
-        let result =
-            extend_var_object_property_by_names_to_ast(code, "NoneComponent", vec_of_strs.clone(), Dialect::Js);
+        let result = extend_var_object_property_by_names_to_ast(
+            code,
+            "NoneComponent",
+            vec_of_strs.clone(),
+            Dialect::Js,
+        );
         assert!(result.is_err());
 
         let code = r#"
@@ -994,8 +1008,12 @@ mod tests {
             export default Components;
             "#;
 
-        let result =
-            extend_var_object_property_by_names_to_ast(code, "Components", vec_of_strs.clone(), Dialect::Js);
+        let result = extend_var_object_property_by_names_to_ast(
+            code,
+            "Components",
+            vec_of_strs.clone(),
+            Dialect::Js,
+        );
         assert!(result.is_err());
 
         let code = r#"
@@ -1010,7 +1028,12 @@ mod tests {
 
         let object_names = ["ScrollArea", "NoneComponent"];
 
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names, Dialect::Js);
+        let result = extend_var_object_property_by_names_to_ast(
+            code,
+            "Components",
+            object_names,
+            Dialect::Js,
+        );
         assert!(result.is_ok());
 
         let code = r#"
@@ -1022,7 +1045,12 @@ mod tests {
             "#;
 
         let object_names = ["ScrollArea", "NoneComponent", "...NoneComponent"];
-        let result = extend_var_object_property_by_names_to_ast(code, "Components", object_names, Dialect::Js);
+        let result = extend_var_object_property_by_names_to_ast(
+            code,
+            "Components",
+            object_names,
+            Dialect::Js,
+        );
 
         assert!(result.is_ok());
     }

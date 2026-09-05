@@ -3,11 +3,11 @@
 //
 // SPDX-License-Identifier: MIT
 
+use super::dialect::Dialect;
 use biome_formatter::{IndentStyle, IndentWidth};
 use biome_js_formatter::context::JsFormatOptions;
 use biome_js_formatter::format_node;
 use biome_js_parser::{parse, JsParserOptions};
-use super::dialect::Dialect;
 
 /// Formats JavaScript source code using a standardized formatting style.
 ///
@@ -52,10 +52,9 @@ pub fn format_as(source_code: &str, dialect: Dialect) -> Result<String, String> 
         return Err("Parsing failed due to syntax errors.".into());
     }
 
-    let options =
-        JsFormatOptions::new(dialect.biome_source())
-            .with_indent_style(IndentStyle::Space)
-            .with_indent_width(IndentWidth::default());
+    let options = JsFormatOptions::new(dialect.biome_source())
+        .with_indent_style(IndentStyle::Space)
+        .with_indent_width(IndentWidth::default());
 
     let result = format_node(options, &parsed.syntax())
         .map_err(|err| format!("Formatting failed: {}", err))?;

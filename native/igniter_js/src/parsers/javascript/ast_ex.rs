@@ -13,7 +13,6 @@ use crate::parsers::javascript::dialect::Dialect;
 use crate::parsers::javascript::phoenix::*;
 use rustler::{Env, NifResult, NifStruct, NifTaggedEnum, Term};
 
-
 /// Resolve a dialect name coming from Elixir.
 ///
 /// The Elixir side always sends one of `"js"`, `"jsx"`, `"ts"`, `"tsx"`, defaulting to `"js"`, so

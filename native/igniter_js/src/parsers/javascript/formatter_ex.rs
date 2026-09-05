@@ -14,12 +14,11 @@ use rustler::{Env, NifResult, Term};
 pub fn format_js_nif(env: Env, file_content: String, dialect: String) -> NifResult<Term> {
     let fn_atom = atoms::format_js_nif();
 
-    let (status, result) = match Dialect::from_name(&dialect)
-        .and_then(|dialect| format_as(&file_content, dialect))
-    {
-        Ok(updated_code) => (atoms::ok(), updated_code),
-        Err(error_msg) => (atoms::error(), error_msg),
-    };
+    let (status, result) =
+        match Dialect::from_name(&dialect).and_then(|dialect| format_as(&file_content, dialect)) {
+            Ok(updated_code) => (atoms::ok(), updated_code),
+            Err(error_msg) => (atoms::error(), error_msg),
+        };
 
     encode_response(env, status, fn_atom, result)
 }

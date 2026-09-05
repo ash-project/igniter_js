@@ -3,11 +3,11 @@
 //
 // SPDX-License-Identifier: MIT
 
+use super::dialect::Dialect;
 use oxc_allocator::Allocator;
 use oxc_ast_visit::utf8_to_utf16::Utf8ToUtf16;
 use oxc_diagnostics::Severity;
 use oxc_parser::{ParseOptions, Parser};
-use super::dialect::Dialect;
 use serde_json::json;
 
 /// Converts JavaScript AST to the ESTree format.
