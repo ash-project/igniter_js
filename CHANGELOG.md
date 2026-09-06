@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.5.0](https://github.com/ash-project/igniter_js/compare/v0.4.11...v0.5.0) (2026-09-06)
+
+
+
+
+### Features:
+
+* parse TypeScript and JSX, chosen per call (#72) by Shahryar Tavakkoli
+
 ## [v0.4.11](https://github.com/ash-project/igniter_js/compare/v0.4.10...v0.4.11) (2025-09-25)
 
 
