@@ -372,6 +372,31 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
     end
   end
 
+  describe "member_values/3" do
+    test "values as written, shorthand included" do
+      assert {:ok, :member_values, [{"@", ~s|"./src"|}, {"a", "fileURLToPath(x)"}, {"fa", "fa"}]} =
+               Edit.member_values(
+                 ~s|export default { resolve: { alias: { "@": "./src", a: fileURLToPath(x), fa } } }|,
+                 :default_export,
+                 path: ["resolve", "alias"],
+                 dialect: :ts
+               )
+    end
+
+    test "JSON values keep their quotes and structure" do
+      assert {:ok, _, [{"name", ~s|"x"|}, {"list", "[1, 2]"}]} =
+               Edit.member_values(~s({"name": "x", "list": [1, 2]}), :document, dialect: :json)
+    end
+
+    test "a path that is not there is an error" do
+      assert {:error, :member_values, _} =
+               Edit.member_values("export default { a: 1 }", :default_export,
+                 path: ["resolve"],
+                 dialect: :ts
+               )
+    end
+  end
+
   describe "text that is not ASCII crosses the NIF boundary unharmed" do
     test "right-to-left text, a zero-width non-joiner and an emoji before the edit" do
       for before <- [@fa, @zwnj, @emoji <> @emoji, "#{@fa} #{@emoji} #{@zwnj}"] do

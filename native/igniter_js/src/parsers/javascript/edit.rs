@@ -166,6 +166,14 @@ pub enum Query {
         #[serde(default)]
         container: Container,
     },
+    /// The members of the container a target and path lead to, each as `[name, value-as-written]`.
+    MemberValues {
+        target: Target,
+        #[serde(default)]
+        path: Vec<String>,
+        #[serde(default)]
+        container: Container,
+    },
     /// Every JSX element name in the file, in source order, with duplicates.
     JsxElements,
     /// Every `import … from "…"`: module, named imports, whether it is type-only.
@@ -309,6 +317,8 @@ struct Mem {
     name: Option<String>,
     start: usize,
     end: usize,
+    /// Where the member's value is: the part after `key:`, or the element itself.
+    value: (usize, usize),
     child: Option<Cont>,
 }
 
@@ -342,7 +352,7 @@ fn cont_of_object(object: &JsObjectExpression) -> Option<Cont> {
     for member in object.members().iter() {
         let member = member.ok()?;
         let (start, end) = trimmed(member.syntax());
-        let (name, child) = match &member {
+        let (name, child, value) = match &member {
             AnyJsObjectMember::JsPropertyObjectMember(p) => {
                 let name = match p.name().ok()? {
                     AnyJsObjectMemberName::JsLiteralMemberName(n) => {
@@ -350,7 +360,12 @@ fn cont_of_object(object: &JsObjectExpression) -> Option<Cont> {
                     }
                     AnyJsObjectMemberName::JsComputedMemberName(_) => None,
                 };
-                (name, p.value().ok().and_then(|v| cont_of_expr(&v)))
+                let value = p
+                    .value()
+                    .ok()
+                    .map(|v| bytes(v.syntax().text_trimmed_range()))
+                    .unwrap_or((start, end));
+                (name, p.value().ok().and_then(|v| cont_of_expr(&v)), value)
             }
             AnyJsObjectMember::JsShorthandPropertyObjectMember(s) => (
                 Some(
@@ -362,13 +377,15 @@ fn cont_of_object(object: &JsObjectExpression) -> Option<Cont> {
                         .to_string(),
                 ),
                 None,
+                (start, end),
             ),
-            _ => (None, None),
+            _ => (None, None, (start, end)),
         };
         members.push(Mem {
             name,
             start,
             end,
+            value,
             child,
         });
     }
@@ -398,6 +415,7 @@ fn cont_of_array(array: &JsArrayExpression) -> Option<Cont> {
             name,
             start,
             end,
+            value: (start, end),
             child,
         });
     }
@@ -446,10 +464,16 @@ fn cont_of_json_object(object: &JsonObjectValue) -> Option<Cont> {
         let member = member.ok()?;
         let range = bytes(member.syntax().text_trimmed_range());
         let name = unquote(member.name().ok()?.value_token().ok()?.text_trimmed());
+        let value = member
+            .value()
+            .ok()
+            .map(|v| bytes(v.syntax().text_trimmed_range()))
+            .unwrap_or(range);
         members.push(Mem {
             name: Some(name),
             start: range.0,
             end: range.1,
+            value,
             child: member.value().ok().and_then(|v| cont_of_json(&v)),
         });
     }
@@ -479,6 +503,7 @@ fn cont_of_json_array(array: &JsonArrayValue) -> Option<Cont> {
             name,
             start: range.0,
             end: range.1,
+            value: range,
             child: cont_of_json(&element),
         });
     }
@@ -747,6 +772,27 @@ pub fn query(source: &str, dialect: &str, query: &Query) -> Result<String, Strin
                 .filter_map(|m| m.name.as_deref())
                 .collect();
             serde_json::json!(names)
+        }
+        Query::MemberValues {
+            target,
+            path,
+            container,
+        } => {
+            let root = resolve(&doc, target)?;
+            let (cont, rest) = descend(&root, path)?;
+            if !rest.is_empty() || cont.kind != *container {
+                return Err("nothing at that path".to_string());
+            }
+            let pairs: Vec<(&str, &str)> = cont
+                .members
+                .iter()
+                .filter_map(|m| {
+                    m.name
+                        .as_deref()
+                        .map(|n| (n, &doc.text[m.value.0..m.value.1]))
+                })
+                .collect();
+            serde_json::json!(pairs)
         }
         Query::JsxElements => {
             let names: Vec<String> = jsx_elements(&doc)?.into_iter().map(|e| e.name).collect();

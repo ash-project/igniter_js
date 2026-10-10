@@ -23,7 +23,8 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
     * object and array members — `merge_object_members/4`, `merge_array_members/4`
     * JSX — `wrap_jsx/4`, `unwrap_jsx/3`, `add_jsx_props/4`
     * imports — `ensure_imports/4`, `move_imports/5`
-    * and questions about a file — `object_members/3`, `jsx_elements/2`, `imports/2`
+    * and questions about a file — `object_members/3`, `member_values/3`, `jsx_elements/2`,
+      `imports/2`
 
   ## Targets
 
@@ -363,6 +364,40 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       path: Keyword.get(opts, :path, []),
       container: Keyword.get(opts, :container, :object)
     })
+  end
+
+  @doc """
+  The members of an object literal with their values **as written**: `[{name, value_source}]`.
+
+  For telling what a member says, not just that it is there — an alias that is a relative string
+  from one that is built from `import.meta.url`:
+
+  ```elixir
+  Edit.member_values(
+    ~s|export default { resolve: { alias: { "@": "./src", a: fileURLToPath(x) } } }|,
+    :default_export,
+    path: ["resolve", "alias"],
+    dialect: :ts
+  )
+  #=> {:ok, :member_values, [{"@", ~s|"./src"|}, {"a", "fileURLToPath(x)"}]}
+  ```
+
+  A shorthand member (`{ fa }`) is its own value. Options are those of `object_members/3`.
+  """
+  @spec member_values(String.t(), target(), keyword()) ::
+          {:ok, atom(), [{String.t(), String.t()}]} | {:error, atom(), String.t()}
+  def member_values(file_path_or_content, target, opts \\ []) do
+    file_path_or_content
+    |> ask(__ENV__.function, opts, %{
+      op: "member_values",
+      target: encode_target(target),
+      path: Keyword.get(opts, :path, []),
+      container: Keyword.get(opts, :container, :object)
+    })
+    |> case do
+      {:ok, function, pairs} -> {:ok, function, Enum.map(pairs, fn [k, v] -> {k, v} end)}
+      error -> error
+    end
   end
 
   @doc """

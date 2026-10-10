@@ -1506,6 +1506,25 @@ mod queries {
     use super::*;
 
     #[test]
+    fn member_values_are_returned_as_written() {
+        let src = "export default { resolve: { alias: { \"@\": \"./src\", a: fileURLToPath(x), fa } } }\n";
+        let answer = query(
+            src,
+            "ts",
+            &Query::MemberValues {
+                target: Target::DefaultExport,
+                path: paths(&["resolve", "alias"]),
+                container: Container::Object,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            answer,
+            "[[\"@\",\"\\\"./src\\\"\"],[\"a\",\"fileURLToPath(x)\"],[\"fa\",\"fa\"]]"
+        );
+    }
+
+    #[test]
     fn the_members_of_an_object() {
         let src = "export const translations = { fa: {}, en: {} } as const\n";
         assert_eq!(
