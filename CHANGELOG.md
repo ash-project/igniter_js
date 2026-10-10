@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [0.5.1](https://github.com/ash-project/igniter_js/compare/v0.5.0...v0.5.1) (2026-10-10)
+
+
+
+
+### Features:
+
+* in-place edits for imports, objects, arrays and JSX — comments and layout kept (#74) by Shahryar Tavakkoli
+
 ## [v0.5.0](https://github.com/ash-project/igniter_js/compare/v0.4.11...v0.5.0) (2026-09-06)
 
 
