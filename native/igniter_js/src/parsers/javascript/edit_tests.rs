@@ -1797,6 +1797,32 @@ mod imports {
     }
 
     #[test]
+    fn exports_are_listed_by_name_and_star() {
+        let src = "export { a, b as c } from \"x\"\nexport type { T } from \"y\"\nexport * from \"z\"\nexport * as ns from \"w\"\nexport const k = 1, m = 2\nexport function f() {}\nexport class C {}\nexport interface I {}\nexport type A = string\nexport enum E {}\nconst local = 1\nexport { local, local as renamed }\nexport default 1\n";
+        let answer = query(src, "ts", &Query::Exports).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&answer).unwrap();
+        let names: Vec<&str> = v["names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_str().unwrap())
+            .collect();
+
+        assert_eq!(
+            names,
+            vec!["a", "c", "T", "ns", "k", "m", "f", "C", "I", "A", "E", "local", "renamed"]
+        );
+        assert_eq!(v["stars"], serde_json::json!(["z"]));
+    }
+
+    #[test]
+    fn a_comment_that_looks_like_an_export_is_not_one() {
+        let src = "// export { fake } from \"x\"\nexport { real }\n";
+        let answer = query(src, "ts", &Query::Exports).unwrap();
+        assert_eq!(answer, "{\"names\":[\"real\"],\"stars\":[]}");
+    }
+
+    #[test]
     fn imports_are_listed() {
         let answer = query("import a, { b, c as d } from \"m\"\nimport type { T } from \"t\"\nimport * as n from \"n\"\nimport \"side\"\n", "ts", &Query::Imports).unwrap();
         let v: serde_json::Value = serde_json::from_str(&answer).unwrap();

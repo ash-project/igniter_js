@@ -24,7 +24,7 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
     * JSX — `wrap_jsx/4`, `unwrap_jsx/3`, `add_jsx_props/4`
     * imports — `ensure_imports/4`, `move_imports/5`, `remove_import_names/4`
     * and questions about a file — `object_members/3`, `member_values/3`, `jsx_elements/2`,
-      `jsx_attributes/3`, `imports/2`
+      `jsx_attributes/3`, `imports/2`, `exports/2`
 
   ## Targets
 
@@ -436,6 +436,26 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       {:ok, function, pairs} -> {:ok, function, Enum.map(pairs, fn [k, v] -> {k, v} end)}
       error -> error
     end
+  end
+
+  @doc """
+  What a module exports: `%{"names" => [...], "stars" => [...]}`.
+
+  Names come from `export { a, b as c }`, `export { x } from "m"`, `export * as ns from "m"` and the
+  declarations (`const`, `function`, `class`, `type`, `interface`, `enum`). `"stars"` lists the
+  modules it re-exports in full (`export * from "m"`), whose names are in those files, not here.
+  A default export has no name.
+
+  ```elixir
+  Edit.exports(~s|export { a, b as c } from "x"\nexport const k = 1\nexport * from "z"|, dialect: :ts)
+  #=> {:ok, :exports, %{"names" => ["a", "c", "k"], "stars" => ["z"]}}
+  ```
+
+  For asking whether a package still offers a name — what an upgrade check needs.
+  """
+  @spec exports(String.t(), keyword()) :: {:ok, atom(), map()} | {:error, atom(), String.t()}
+  def exports(file_path_or_content, opts \\ []) do
+    ask(file_path_or_content, __ENV__.function, opts, %{op: "exports"})
   end
 
   @doc """

@@ -382,6 +382,14 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
                )
     end
 
+    test "exports/2 lists names and star re-exports" do
+      assert {:ok, :exports, %{"names" => ["a", "c", "k"], "stars" => ["z"]}} =
+               Edit.exports(
+                 ~s|export { a, b as c } from "x"\nexport const k = 1\nexport * from "z"\n|,
+                 dialect: :ts
+               )
+    end
+
     test "imports/2 lists every import" do
       assert {:ok, :imports, [first, second]} =
                Edit.imports(~s(import a, { b, c as d } from "m"\nimport type { T } from "t"\n),

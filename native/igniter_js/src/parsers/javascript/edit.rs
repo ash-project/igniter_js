@@ -41,12 +41,13 @@
 use super::dialect::Dialect;
 use biome_js_parser::{parse, JsParserOptions};
 use biome_js_syntax::{
-    AnyJsArrayElement, AnyJsCombinedSpecifier, AnyJsExpression, AnyJsFunctionBody,
-    AnyJsImportClause, AnyJsNamedImportSpecifier, AnyJsObjectMember, AnyJsObjectMemberName,
-    AnyJsStatement, AnyJsxAttribute, AnyJsxAttributeValue, AnyJsxChild, JsArrayExpression,
-    JsCallExpression, JsExportDefaultExpressionClause, JsFunctionBody, JsImport, JsModule,
-    JsNamedImportSpecifiers, JsObjectExpression, JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator,
-    JsxElement, JsxSelfClosingElement,
+    AnyJsArrayElement, AnyJsBinding, AnyJsBindingPattern, AnyJsCombinedSpecifier,
+    AnyJsDeclarationClause, AnyJsExportClause, AnyJsExportNamedSpecifier, AnyJsExpression,
+    AnyJsFunctionBody, AnyJsImportClause, AnyJsNamedImportSpecifier, AnyJsObjectMember,
+    AnyJsObjectMemberName, AnyJsStatement, AnyJsxAttribute, AnyJsxAttributeValue, AnyJsxChild,
+    JsArrayExpression, JsCallExpression, JsExportDefaultExpressionClause, JsFunctionBody, JsImport,
+    JsModule, JsNamedImportSpecifiers, JsObjectExpression, JsSyntaxKind, JsSyntaxNode,
+    JsVariableDeclarator, JsxElement, JsxSelfClosingElement,
 };
 use biome_json_parser::{parse_json, JsonParserOptions};
 use biome_json_syntax::{AnyJsonValue, JsonArrayValue, JsonObjectValue};
@@ -198,6 +199,9 @@ pub enum Query {
     JsxElements,
     /// Every `import … from "…"`: module, named imports, whether it is type-only.
     Imports,
+    /// What the file exports: the names, and the modules it re-exports everything from
+    /// (`export * from "m"`), whose names this cannot know.
+    Exports,
 }
 
 // ── the document ────────────────────────────────────────────────────────────
@@ -843,6 +847,10 @@ pub fn query(source: &str, dialect: &str, query: &Query) -> Result<String, Strin
         Query::JsxElements => {
             let names: Vec<String> = jsx_elements(&doc)?.into_iter().map(|e| e.name).collect();
             serde_json::json!(names)
+        }
+        Query::Exports => {
+            let (names, stars) = exports(&doc)?;
+            serde_json::json!({ "names": names, "stars": stars })
         }
         Query::Imports => {
             let imports: Vec<serde_json::Value> = imports(&doc)?
@@ -1651,6 +1659,106 @@ fn prologue_end(doc: &Doc) -> Option<usize> {
         .and_then(|d| d.syntax().last_token())
         .map(|t| usize::from(t.text_range().end()));
     interpreter.max(directive)
+}
+
+// ── exports ─────────────────────────────────────────────────────────────────
+
+/// The names a module exports, and the modules it re-exports in full.
+///
+/// `export { a, b as c }`, `export { x } from "m"`, `export const …`, `export function …`,
+/// `export class …`, `export type …` / `interface` / `enum`. A default export has no name here,
+/// and `export * from "m"` is reported as a module, because what is in it is that file's business.
+fn exports(doc: &Doc) -> Result<(Vec<String>, Vec<String>), String> {
+    let module = JsModule::cast(doc.js()?.clone()).ok_or("not a module")?;
+    let mut names = Vec::new();
+    let mut stars = Vec::new();
+
+    for item in module.items().iter() {
+        let biome_js_syntax::AnyJsModuleItem::JsExport(export) = item else {
+            continue;
+        };
+        let Ok(clause) = export.export_clause() else {
+            continue;
+        };
+
+        match clause {
+            AnyJsExportClause::JsExportNamedClause(c) => {
+                for specifier in c.specifiers().iter().flatten() {
+                    match specifier {
+                        AnyJsExportNamedSpecifier::JsExportNamedShorthandSpecifier(s) => {
+                            if let Some(n) = s.name().ok().and_then(|n| n.value_token().ok()) {
+                                names.push(n.text_trimmed().to_string());
+                            }
+                        }
+                        AnyJsExportNamedSpecifier::JsExportNamedSpecifier(s) => {
+                            if let Some(n) = s.exported_name().ok().and_then(|n| n.value().ok()) {
+                                names.push(unquote(n.text_trimmed()));
+                            }
+                        }
+                    }
+                }
+            }
+            AnyJsExportClause::JsExportNamedFromClause(c) => {
+                for specifier in c.specifiers().iter().flatten() {
+                    let renamed = specifier
+                        .export_as()
+                        .and_then(|a| a.exported_name().ok())
+                        .and_then(|n| n.value().ok());
+                    let original = specifier.source_name().ok().and_then(|n| n.value().ok());
+                    if let Some(token) = renamed.or(original) {
+                        names.push(unquote(token.text_trimmed()));
+                    }
+                }
+            }
+            AnyJsExportClause::JsExportFromClause(c) => match c.export_as() {
+                Some(alias) => {
+                    if let Some(n) = alias.exported_name().ok().and_then(|n| n.value().ok()) {
+                        names.push(unquote(n.text_trimmed()));
+                    }
+                }
+                None => {
+                    if let Some(source) = c.source().ok().and_then(|s| s.value_token().ok()) {
+                        stars.push(unquote(source.text_trimmed()));
+                    }
+                }
+            },
+            AnyJsExportClause::AnyJsDeclarationClause(d) => declared_names(&d, &mut names),
+            _ => {}
+        }
+    }
+
+    Ok((names, stars))
+}
+
+fn declared_names(clause: &AnyJsDeclarationClause, names: &mut Vec<String>) {
+    let binding = |b: Option<AnyJsBinding>| b.map(|b| b.syntax().text_trimmed().to_string());
+
+    match clause {
+        AnyJsDeclarationClause::JsVariableDeclarationClause(c) => {
+            if let Ok(declaration) = c.declaration() {
+                for declarator in declaration.declarators().iter().flatten() {
+                    if let Ok(AnyJsBindingPattern::AnyJsBinding(b)) = declarator.id() {
+                        names.push(b.syntax().text_trimmed().to_string());
+                    }
+                }
+            }
+        }
+        AnyJsDeclarationClause::JsFunctionDeclaration(d) => names.extend(binding(d.id().ok())),
+        AnyJsDeclarationClause::JsClassDeclaration(d) => names.extend(binding(d.id().ok())),
+        AnyJsDeclarationClause::TsEnumDeclaration(d) => names.extend(binding(d.id().ok())),
+        AnyJsDeclarationClause::TsDeclareFunctionDeclaration(d) => {
+            names.extend(binding(d.id().ok()))
+        }
+        AnyJsDeclarationClause::TsTypeAliasDeclaration(d) => names.extend(
+            d.binding_identifier()
+                .ok()
+                .map(|b| b.syntax().text_trimmed().to_string()),
+        ),
+        AnyJsDeclarationClause::TsInterfaceDeclaration(d) => {
+            names.extend(d.id().ok().map(|b| b.syntax().text_trimmed().to_string()))
+        }
+        _ => {}
+    }
 }
 
 // ── removing imports ────────────────────────────────────────────────────────
