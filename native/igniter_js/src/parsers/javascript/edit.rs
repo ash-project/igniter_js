@@ -775,12 +775,14 @@ fn merge_members(
     }
 
     // Levels are missing: write the whole nest at the head of the deepest container that exists.
-    let quoted = matches!(doc.tree, Tree::Json(_));
-    Ok(vec![insert_block(
-        doc,
-        cont,
-        &nest(rest, container, members, quoted),
-    )])
+    let json = matches!(doc.tree, Tree::Json(_));
+    let mut block = nest(rest, container, members, json);
+    // The comma that separates the new level from what follows it — only when something does,
+    // or when the language allows a trailing one.
+    if !json || !cont.members.is_empty() {
+        block.push(',');
+    }
+    Ok(vec![insert_block(doc, cont, &block)])
 }
 
 /// Members into a container that exists.
@@ -835,11 +837,16 @@ fn insert_members(doc: &Doc, cont: &Cont, missing: &[&Member]) -> Edit {
             None => format!("{}  ", doc.line_indent(cont.open)),
         };
         let mut text = String::new();
-        for member in missing {
+        for (i, member) in missing.iter().enumerate() {
             text.push('\n');
             text.push_str(&indent);
             text.push_str(&member.code);
-            text.push(',');
+            // Strict JSON has no trailing comma, so the last new member of an empty container
+            // goes without one. In JavaScript a trailing comma is the usual style.
+            let last_and_alone = i + 1 == missing.len() && cont.members.is_empty();
+            if !(last_and_alone && matches!(doc.tree, Tree::Json(_))) {
+                text.push(',');
+            }
         }
         // After the opener's own trailing comment, so `{ // note` keeps its note.
         return Edit {
@@ -927,15 +934,18 @@ fn insert_block(doc: &Doc, cont: &Cont, block: &str) -> Edit {
     }
 }
 
-/// `a: {\n  b: {\n    members…\n  },\n},` for the levels `path` names.
-fn nest(path: &[String], container: Container, members: &[Member], quoted: bool) -> String {
+/// `a: {\n  b: {\n    members…\n  }\n}` for the levels `path` names — no comma after the whole
+/// of it; the caller knows whether something follows.
+///
+/// `json` is strict JSON: keys are always quoted and nothing gets a trailing comma. In JavaScript a
+/// trailing comma after each member and level is the usual style.
+fn nest(path: &[String], container: Container, members: &[Member], json: bool) -> String {
     let (open, close) = match container {
         Container::Object => ("{", "}"),
         Container::Array => ("[", "]"),
     };
     let key = &path[0];
-    // JSON requires quoted keys; JavaScript only needs them for names that are not identifiers.
-    let label = if !quoted
+    let label = if !json
         && key
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
@@ -944,32 +954,38 @@ fn nest(path: &[String], container: Container, members: &[Member], quoted: bool)
     } else {
         format!("\"{key}\"")
     };
+    let trailing = if json { "" } else { "," };
 
     if path.len() == 1 {
         let mut text = format!("{label}: {open}\n");
-        for member in members {
+        for (n, member) in members.iter().enumerate() {
             let lines: Vec<&str> = member.code.lines().collect();
+            let last_member = n + 1 == members.len();
             for (i, line) in lines.iter().enumerate() {
                 text.push_str("  ");
                 text.push_str(line);
-                if i + 1 == lines.len() {
+                if i + 1 == lines.len() && (!last_member || !json) {
                     text.push(',');
                 }
                 text.push('\n');
             }
         }
-        text.push_str(&format!("{close},"));
+        text.push_str(close);
         return text;
     }
 
-    let inner = nest(&path[1..], container, members, quoted);
+    let inner = nest(&path[1..], container, members, json);
     let mut text = format!("{label}: {{\n");
-    for line in inner.lines() {
+    let lines: Vec<&str> = inner.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
         text.push_str("  ");
         text.push_str(line);
+        if i + 1 == lines.len() {
+            text.push_str(trailing);
+        }
         text.push('\n');
     }
-    text.push_str("},");
+    text.push('}');
     text
 }
 

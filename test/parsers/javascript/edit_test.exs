@@ -182,7 +182,21 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
                  dialect: :json
                )
 
-      assert out == ~s({\n  "workspaces": [\n    "a",\n  ],\n  "name": "x"\n}\n)
+      assert out == ~s({\n  "workspaces": [\n    "a"\n  ],\n  "name": "x"\n}\n)
+      # strict JSON: no trailing comma, so npm and bun accept it
+      assert Jason.decode!(out) == %{"workspaces" => ["a"], "name" => "x"}
+    end
+
+    test "an empty package.json gets strict JSON, never a trailing comma" do
+      for source <- ["{}", "{\n}\n", "{ }"] do
+        assert {:ok, _, out} =
+                 Edit.merge_array_members(source, :document, ["vendor/@rsk/*"],
+                   path: ["workspaces"],
+                   dialect: :json
+                 )
+
+        assert Jason.decode!(out) == %{"workspaces" => ["vendor/@rsk/*"]}
+      end
     end
 
     test "dedupe in a Vite config" do

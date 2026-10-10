@@ -850,6 +850,94 @@ mod json {
         assert_eq!(once, twice);
     }
 
+    /// Strict JSON — `package.json` — has no trailing comma anywhere. Parsed with a strict parser,
+    /// not looked at, because a comma that is allowed in JavaScript is a broken file to npm.
+    fn strict(text: &str) -> serde_json::Value {
+        serde_json::from_str(text).unwrap_or_else(|e| panic!("not strict JSON ({e}):\n{text}"))
+    }
+
+    #[test]
+    fn everything_written_into_an_empty_document_is_strict_json() {
+        for src in ["{}", "{\n}\n", "{ }", "  {}\n"] {
+            let out = doc_merge(
+                src,
+                &["workspaces"],
+                Container::Array,
+                vec![member("vendor/@rsk/*", "\"vendor/@rsk/*\"")],
+            );
+            assert_eq!(
+                strict(&out),
+                serde_json::json!({"workspaces": ["vendor/@rsk/*"]}),
+                "{out}"
+            );
+
+            let out = doc_merge(
+                src,
+                &[],
+                Container::Object,
+                vec![member("a", "\"a\": 1"), member("b", "\"b\": 2")],
+            );
+            assert_eq!(strict(&out), serde_json::json!({"a": 1, "b": 2}), "{out}");
+
+            let out = doc_merge(
+                src,
+                &["compilerOptions", "paths"],
+                Container::Object,
+                vec![member("@x/y", "\"@x/y\": [\"./y\"]")],
+            );
+            assert_eq!(
+                strict(&out),
+                serde_json::json!({"compilerOptions": {"paths": {"@x/y": ["./y"]}}}),
+                "{out}"
+            );
+        }
+    }
+
+    #[test]
+    fn everything_written_before_existing_members_is_strict_json() {
+        let src = "{\n  \"name\": \"app\",\n  \"scripts\": { \"dev\": \"vite\" }\n}\n";
+
+        let out = doc_merge(
+            src,
+            &["workspaces"],
+            Container::Array,
+            vec![member("a", "\"a\""), member("b", "\"b\"")],
+        );
+        assert_eq!(
+            strict(&out)["workspaces"],
+            serde_json::json!(["a", "b"]),
+            "{out}"
+        );
+        assert_eq!(strict(&out)["name"], "app");
+
+        let out = doc_merge(
+            src,
+            &["scripts"],
+            Container::Object,
+            vec![member("build", "\"build\": \"tsc\"")],
+        );
+        assert_eq!(
+            strict(&out)["scripts"],
+            serde_json::json!({"build": "tsc", "dev": "vite"}),
+            "{out}"
+        );
+
+        let out = doc_merge(
+            src,
+            &["a", "b", "c"],
+            Container::Object,
+            vec![member("k", "\"k\": true")],
+        );
+        assert_eq!(strict(&out)["a"]["b"]["c"]["k"], true, "{out}");
+    }
+
+    #[test]
+    fn a_trailing_comma_the_developer_wrote_in_jsonc_is_left_alone() {
+        let src = "{\n  \"a\": 1,\n}\n";
+        let out = doc_merge(src, &["list"], Container::Array, vec![member("x", "\"x\"")]);
+        assert!(out.ends_with("\"a\": 1,\n}\n"), "{out}");
+    }
+
     #[test]
     fn invalid_json_is_an_error() {
         assert!(merge_with(
