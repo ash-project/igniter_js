@@ -7,6 +7,10 @@ pub mod ast;
 pub mod ast_ex;
 pub mod ast_json;
 pub mod dialect;
+pub mod edit;
+pub mod edit_ex;
+#[cfg(test)]
+mod edit_tests;
 pub mod formatter;
 pub mod formatter_ex;
 pub mod helpers;

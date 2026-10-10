@@ -267,19 +267,12 @@ pub fn insert_import_to_ast(
     import_lines: &str,
     dialect: Dialect,
 ) -> Result<String, String> {
-    let mut import_visitor = ASTVisitImport {
-        dialect,
-        code: import_lines,
-        operation: Operation::Add,
-        ..Default::default()
-    };
+    use super::edit::{insert_imports, InsertError};
 
-    let output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect)?;
-
-    match import_visitor.parse_error {
-        Some(error) => Err(error),
-        None => Ok(output),
-    }
+    insert_imports(file_content, dialect.name(), import_lines).map_err(|error| match error {
+        InsertError::Argument => INVALID_ARGUMENT_MESSAGE.to_string(),
+        InsertError::Source(_) => "Failed to parse JavaScript content".to_string(),
+    })
 }
 
 /// Removes specified import statements from JavaScript source code.
@@ -301,26 +294,20 @@ pub fn insert_import_to_ast(
 /// or an error message if parsing fails.
 ///
 /// # Behavior
-/// - Retains all other import statements and code structure.
-/// - Removes only the specified modules from the import declarations.
+/// - Everything else in the file is returned exactly as written: comments, blank lines, spacing,
+///   quotes, `;` or no `;`, line endings.
+/// - Removes every import of the specified modules, whole: its line, a comment after it on that
+///   line, and the line break. A comment on its own line above it is kept.
 pub fn remove_import_from_ast(
     file_content: &str,
     modules: &str,
     dialect: Dialect,
 ) -> Result<String, String> {
-    let mut import_visitor = ASTVisitImport {
-        dialect,
-        code: modules,
-        operation: Operation::Delete,
-        ..Default::default()
-    };
+    use super::edit::{remove_imports, RemoveError};
 
-    let output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect)?;
-
-    match import_visitor.parse_error {
-        Some(error) => Err(error),
-        None => Ok(output),
-    }
+    remove_imports(file_content, dialect.name(), modules).map_err(|error| match error {
+        RemoveError::Source(_) => "Failed to parse JavaScript content".to_string(),
+    })
 }
 
 // ###################################################################################
@@ -1195,6 +1182,501 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Index out of bounds");
+        }
+    }
+
+    /// `insert_import_to_ast` on a file that is not in any printer's style.
+    ///
+    /// It used to parse, edit and PRINT AGAIN, which rewrote the whole file: `;` on every line,
+    /// blank lines gone, a header comment glued to the directive after it, a comment inside an
+    /// object dropped, CRLF turned into LF. Now only the new line is written and everything else
+    /// is returned as it was — and a file that already imports what is asked for is returned
+    /// untouched, because importing something twice is bad code, not a harmless repeat.
+    ///
+    /// Non-ASCII text is written with `\u{..}` escapes, so this file stays ASCII.
+    mod messy_files {
+        use super::*;
+
+        const ZOD: &str = "import { z } from \"zod\"";
+
+        fn add(src: &str) -> String {
+            insert_import_to_ast(src, ZOD, Dialect::Tsx).unwrap()
+        }
+
+        fn add_lines(src: &str, lines: &str) -> String {
+            insert_import_to_ast(src, lines, Dialect::Tsx).unwrap()
+        }
+
+        #[test]
+        fn comments_blank_lines_and_spacing_are_kept_and_nothing_gets_a_semicolon() {
+            let src = "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(
+                add(src),
+                "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\nimport { z } from 'zod'\n\nconst  x = {\n    a: 1,   // one\n}\n"
+            );
+        }
+
+        #[test]
+        fn a_header_comment_and_a_directive_stay_where_they_are() {
+            let src =
+                "/**\n * Copyright\n */\n'use strict'\n\nimport a from 'a'\n\nexport const y = 1\n";
+
+            assert_eq!(
+                add(src),
+                "/**\n * Copyright\n */\n'use strict'\n\nimport a from 'a'\nimport { z } from 'zod'\n\nexport const y = 1\n"
+            );
+        }
+
+        #[test]
+        fn groups_of_imports_keep_the_blank_lines_between_them() {
+            let src = "import react from 'react'\nimport dom from 'react-dom'\n\nimport local from './local'\n\nconst z = <div/>\n";
+
+            assert_eq!(
+                add(src),
+                "import react from 'react'\nimport dom from 'react-dom'\n\nimport local from './local'\nimport { z } from 'zod'\n\nconst z = <div/>\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_import_stays_multiline_and_the_new_line_follows_its_quotes() {
+            let src = "import {\n  a,\n  b,\n} from \"m\"\n\nconst q = 1\n";
+
+            assert_eq!(
+                add(src),
+                "import {\n  a,\n  b,\n} from \"m\"\nimport { z } from \"zod\"\n\nconst q = 1\n"
+            );
+        }
+
+        #[test]
+        fn crlf_files_stay_crlf() {
+            let src = "import a from 'a'\r\n\r\nconst x = 1\r\n";
+
+            assert_eq!(
+                add(src),
+                "import a from 'a'\r\nimport { z } from 'zod'\r\n\r\nconst x = 1\r\n"
+            );
+        }
+
+        #[test]
+        fn jsx_is_not_reprinted() {
+            let src = "import React from 'react'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n";
+
+            assert_eq!(
+                add(src),
+                "import React from 'react'\nimport { z } from 'zod'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n"
+            );
+        }
+
+        #[test]
+        fn non_ascii_comments_and_strings_are_kept_with_their_layout() {
+            let fa = "\u{0633}\u{0644}\u{0627}\u{0645}";
+            let src = format!("// {fa}\nimport a from 'a'\n\n/* {fa} */\nconst x = \"{fa}\"\n");
+
+            assert_eq!(
+                add(&src),
+                format!("// {fa}\nimport a from 'a'\nimport {{ z }} from 'zod'\n\n/* {fa} */\nconst x = \"{fa}\"\n")
+            );
+        }
+
+        #[test]
+        fn a_file_with_semicolons_and_double_quotes_gets_a_line_in_that_style() {
+            assert_eq!(
+                add_lines(
+                    "import a from \"a\";\nconst x = 1;\n",
+                    "import { z } from 'zod'"
+                ),
+                "import a from \"a\";\nimport { z } from \"zod\";\nconst x = 1;\n"
+            );
+        }
+
+        #[test]
+        fn a_file_with_no_imports_takes_the_callers_style() {
+            assert_eq!(
+                add_lines("const x = 1\n", "import { z } from 'zod';"),
+                "import { z } from 'zod';\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn the_first_import_goes_after_a_directive_and_a_hashbang() {
+            assert_eq!(
+                add("'use client'\n\nconst x = 1\n"),
+                "'use client'\nimport { z } from \"zod\"\n\nconst x = 1\n"
+            );
+            assert_eq!(
+                add("#!/usr/bin/env node\nconst x = 1\n"),
+                "#!/usr/bin/env node\nimport { z } from \"zod\"\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn several_statements_are_added_in_order() {
+            assert_eq!(
+                add_lines(
+                    "import a from 'a'\nconst x = 1\n",
+                    "import { z } from \"zod\"\nimport y from \"why\""
+                ),
+                "import a from 'a'\nimport { z } from 'zod'\nimport y from 'why'\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_after_the_last_import_stays_on_its_own_line() {
+            assert_eq!(
+                add("import a from 'a' // keep\n\nconst x = 1\n"),
+                "import a from 'a' // keep\nimport { z } from 'zod'\n\nconst x = 1\n"
+            );
+            assert_eq!(
+                add("import a from 'a'; /* keep */\nconst x = 1;\n"),
+                "import a from 'a'; /* keep */\nimport { z } from 'zod';\nconst x = 1;\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_after_a_directive_stays_on_its_own_line() {
+            assert_eq!(
+                add("'use client' // keep\nconst x = 1\n"),
+                "'use client' // keep\nimport { z } from \"zod\"\nconst x = 1\n"
+            );
+        }
+
+        // ── what is already imported is not imported again ──
+
+        #[test]
+        fn names_asked_in_one_call_come_out_in_that_order() {
+            assert_eq!(
+                add_lines(
+                    "const x = 1\n",
+                    "import { a } from \"A\"\nimport { b } from \"A\"\nimport { c } from \"A\""
+                ),
+                "import { a, b, c } from \"A\"\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_list_written_one_name_per_line_gets_the_new_name_on_its_own_line() {
+            assert_eq!(
+                add_lines(
+                    "import {\n  a,\n  b,\n} from \"m\"\n\nconst q = 1\n",
+                    "import { c } from \"m\""
+                ),
+                "import {\n  a,\n  b,\n  c,\n} from \"m\"\n\nconst q = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_list_without_a_trailing_comma_stays_without_one() {
+            assert_eq!(
+                add_lines(
+                    "import {\n    a,\n    b\n} from \"m\"\n",
+                    "import { c, d } from \"m\""
+                ),
+                "import {\n    a,\n    b,\n    c,\n    d\n} from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn an_inline_trailing_comma_is_left_where_it_was() {
+            assert_eq!(
+                add_lines("import { a, } from \"m\"\n", "import { b } from \"m\""),
+                "import { a, b, } from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_between_the_names_stays_put() {
+            assert_eq!(
+                add_lines(
+                    "import {\n  a, // first\n  b, // second\n} from \"m\"\n",
+                    "import { c } from \"m\""
+                ),
+                "import {\n  a, // first\n  b,\n  c, // second\n} from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn an_import_that_is_already_there_changes_nothing() {
+            let src = "import { createRsk } from \"@rsk/core\";\n";
+            assert_eq!(
+                add_lines(src, "import { createRsk } from \"@rsk/core\""),
+                src
+            );
+            assert_eq!(
+                add_lines(src, "import { createRsk } from '@rsk/core';"),
+                src
+            );
+        }
+
+        #[test]
+        fn names_split_across_imports_are_still_found() {
+            let src = "import { a } from \"m\"\nimport { b } from \"m\"\n";
+            assert_eq!(add_lines(src, "import { a, b } from \"m\""), src);
+        }
+
+        #[test]
+        fn an_import_that_brings_a_new_name_for_the_same_module_is_merged_not_repeated() {
+            let src = "import { createRsk } from \"@rsk/core\";\n";
+            assert_eq!(
+                add_lines(src, "import { i18nPreset } from \"@rsk/core\""),
+                "import { createRsk, i18nPreset } from \"@rsk/core\";\n"
+            );
+        }
+
+        #[test]
+        fn only_the_missing_names_are_merged() {
+            let src = "import { a } from \"m\"\n";
+            assert_eq!(
+                add_lines(src, "import { a, b, c } from \"m\""),
+                "import { a, b, c } from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn an_aliased_name_is_merged_as_written() {
+            let src = "import { x } from 'backpex'\n";
+            assert_eq!(
+                add_lines(src, "import { Hooks as BackpexHooks } from 'backpex'"),
+                "import { x, Hooks as BackpexHooks } from 'backpex'\n"
+            );
+        }
+
+        #[test]
+        fn a_default_import_only_gets_the_names_after_it() {
+            assert_eq!(
+                add_lines(
+                    "import React from \"react\"\n",
+                    "import { useState } from \"react\""
+                ),
+                "import React, { useState } from \"react\"\n"
+            );
+        }
+
+        #[test]
+        fn an_empty_pair_of_braces_is_filled() {
+            assert_eq!(
+                add_lines("import {} from \"m\"\n", "import { a } from \"m\""),
+                "import { a } from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn a_default_or_namespace_import_that_is_new_is_its_own_line() {
+            let src = "import { a } from \"m\"\n";
+            assert_eq!(
+                add_lines(src, "import M from \"m\""),
+                "import { a } from \"m\"\nimport M from \"m\"\n"
+            );
+            assert_eq!(
+                add_lines("import M from \"m\"\n", "import * as N from \"m\""),
+                "import M from \"m\"\nimport * as N from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn a_bare_import_is_a_duplicate_when_the_module_is_imported_in_any_form() {
+            let src = "import { a } from \"m\"\n";
+            assert_eq!(add_lines(src, "import \"m\""), src);
+        }
+
+        #[test]
+        fn a_type_import_is_only_compared_with_type_imports() {
+            let src = "import { T } from \"m\"\n";
+            assert_eq!(
+                add_lines(src, "import type { T } from \"m\""),
+                "import { T } from \"m\"\nimport type { T } from \"m\"\n"
+            );
+            assert_eq!(
+                add_lines(
+                    "import type { T } from \"m\"\n",
+                    "import type { T } from \"m\""
+                ),
+                "import type { T } from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn inserting_twice_changes_nothing() {
+            let src = "import a from 'a'\n\nconst x = 1\n";
+            let once = add(src);
+            assert_eq!(add(&once), once);
+        }
+
+        #[test]
+        fn something_that_is_not_an_import_is_inserted_as_written() {
+            assert_eq!(
+                add_lines("import a from 'a'\nconst x = 1\n", "const y = 2;"),
+                "import a from 'a'\nconst y = 2;\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn arguments_that_do_not_parse_are_an_error() {
+            assert!(
+                insert_import_to_ast("const x = 1\n", "../vendor/topbar", Dialect::Tsx).is_err()
+            );
+        }
+
+        #[test]
+        fn a_file_that_does_not_parse_is_an_error() {
+            assert_eq!(
+                insert_import_to_ast("const x = ;;;", ZOD, Dialect::Tsx).unwrap_err(),
+                "Failed to parse JavaScript content"
+            );
+        }
+
+        // ── removing ──
+
+        fn remove(src: &str, modules: &str) -> String {
+            remove_import_from_ast(src, modules, Dialect::Tsx).unwrap()
+        }
+
+        #[test]
+        fn removing_an_import_changes_only_its_line() {
+            let src = "import a   from 'a'\nimport b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(
+                remove(src, "a"),
+                "import b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_after_the_import_on_its_line_goes_with_it() {
+            assert_eq!(
+                remove("import a from 'a' // the a\nimport b from 'b'\n", "a"),
+                "import b from 'b'\n"
+            );
+            assert_eq!(
+                remove("import a from 'a' /* the a */\nimport b from 'b'\n", "a"),
+                "import b from 'b'\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_on_its_own_line_above_stays() {
+            let src = "/**\n * Copyright\n */\n// topbar\nimport topbar from 'topbar'\nimport b from 'b'\n";
+
+            assert_eq!(
+                remove(src, "topbar"),
+                "/**\n * Copyright\n */\n// topbar\nimport b from 'b'\n"
+            );
+        }
+
+        #[test]
+        fn two_blank_lines_in_a_row_are_not_left_behind() {
+            let src = "import a from 'a'\n\nimport b from 'b'\n\nconst x = 1\n";
+
+            assert_eq!(remove(src, "b"), "import a from 'a'\n\nconst x = 1\n");
+        }
+
+        #[test]
+        fn a_blank_line_that_separates_something_stays() {
+            let src = "import a from 'a'\nimport b from 'b'\n\nconst x = 1\n";
+
+            assert_eq!(remove(src, "b"), "import a from 'a'\n\nconst x = 1\n");
+        }
+
+        #[test]
+        fn crlf_files_stay_crlf_when_removing() {
+            let src = "import a from 'a'\r\nimport b from 'b'\r\n\r\nconst x = 1\r\n";
+
+            assert_eq!(remove(src, "a"), "import b from 'b'\r\n\r\nconst x = 1\r\n");
+        }
+
+        #[test]
+        fn an_indented_import_takes_its_indentation_too() {
+            assert_eq!(
+                remove("  import a from 'a'\nconst x = 1\n", "a"),
+                "const x = 1\n"
+            );
+        }
+
+        #[test]
+        fn the_last_line_of_a_file_without_a_line_break() {
+            assert_eq!(
+                remove("const x = 1\nimport a from 'a'", "a"),
+                "const x = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_import_goes_whole() {
+            let src = "import {\n  a,\n  b,\n} from \"m\"\nconst q = 1\n";
+
+            assert_eq!(remove(src, "m"), "const q = 1\n");
+        }
+
+        #[test]
+        fn every_import_of_the_module_goes_whatever_it_binds() {
+            let src = "import { a } from \"m\"\nimport type { T } from \"m\"\nimport \"m\"\nimport k from \"k\"\n";
+
+            assert_eq!(remove(src, "m"), "import k from \"k\"\n");
+        }
+
+        #[test]
+        fn several_modules_one_per_line_or_as_statements() {
+            let src = "import a from 'a'\nimport b from 'b'\nimport c from 'c'\n";
+
+            assert_eq!(remove(src, "a\nc"), "import b from 'b'\n");
+            assert_eq!(
+                remove(src, "import a from \"a\";\nimport c from \"c\";"),
+                "import b from 'b'\n"
+            );
+            // The statement names the module; what it binds does not matter.
+            assert_eq!(
+                remove(src, "import { zzz } from \"b\""),
+                "import a from 'a'\nimport c from 'c'\n"
+            );
+        }
+
+        #[test]
+        fn a_module_that_is_not_imported_returns_the_file_as_it_was() {
+            let src = "import a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(remove(src, "zzz"), src);
+            assert_eq!(remove(src, "   "), src);
+            assert_eq!(remove(src, ""), src);
+        }
+
+        #[test]
+        fn non_ascii_text_around_the_import_is_kept() {
+            let fa = "\u{0633}\u{0644}\u{0627}\u{0645}";
+            let src =
+                format!("// {fa}\nimport a from 'a' // {fa}\n\n/* {fa} */\nconst x = \"{fa}\"\n");
+
+            assert_eq!(
+                remove(&src, "a"),
+                format!("// {fa}\n\n/* {fa} */\nconst x = \"{fa}\"\n")
+            );
+        }
+
+        #[test]
+        fn adding_then_removing_gives_back_the_file() {
+            let src = "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(remove(&add(src), "zod"), src);
+        }
+
+        #[test]
+        fn removing_twice_changes_nothing() {
+            let once = remove("import a from 'a'\nimport b from 'b'\n", "a");
+            assert_eq!(remove(&once, "a"), once);
+        }
+
+        #[test]
+        fn jsx_is_not_reprinted_when_removing() {
+            let src = "import React from 'react'\nimport z from 'zod'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n";
+
+            assert_eq!(
+                remove(src, "zod"),
+                "import React from 'react'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n"
+            );
+        }
+
+        #[test]
+        fn a_file_that_does_not_parse_is_an_error_when_removing_too() {
+            assert!(remove_import_from_ast("const x = ;;;", "a", Dialect::Tsx).is_err());
         }
     }
 }
