@@ -65,6 +65,29 @@ fn merge_with(
     members: Vec<Member>,
     mode: Mode,
 ) -> Result<String, String> {
+    merge_at(
+        dialect,
+        source,
+        target,
+        path,
+        container,
+        members,
+        mode,
+        Placement::Head,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn merge_at(
+    dialect: &str,
+    source: &str,
+    target: Target,
+    path: &[&str],
+    container: Container,
+    members: Vec<Member>,
+    mode: Mode,
+    at: Placement,
+) -> Result<String, String> {
     edit(
         source,
         dialect,
@@ -74,6 +97,7 @@ fn merge_with(
             container,
             members,
             mode,
+            at,
         },
     )
 }
@@ -983,6 +1007,194 @@ mod json {
             Mode::Add
         )
         .is_err());
+    }
+}
+
+// ── placing members at the end ──────────────────────────────────────────────
+
+mod at_the_end {
+    use super::*;
+
+    fn at_end(src: &str, path: &[&str], container: Container, members: Vec<Member>) -> String {
+        merge_at(
+            "ts",
+            src,
+            Target::DefaultExport,
+            path,
+            container,
+            members,
+            Mode::Add,
+            Placement::End,
+        )
+        .unwrap()
+    }
+
+    fn json_end(src: &str, path: &[&str], container: Container, members: Vec<Member>) -> String {
+        merge_at(
+            "json",
+            src,
+            Target::Document,
+            path,
+            container,
+            members,
+            Mode::Add,
+            Placement::End,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn package_json_gets_workspaces_after_everything_else_and_stays_strict_json() {
+        let src = "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"dependencies\": {\n    \"react\": \"^19\"\n  }\n}\n";
+        let out = json_end(
+            src,
+            &["workspaces"],
+            Container::Array,
+            vec![member("vendor/@rsk/*", "\"vendor/@rsk/*\"")],
+        );
+
+        assert_eq!(
+            out,
+            "{\n  \"name\": \"app\",\n  \"private\": true,\n  \"dependencies\": {\n    \"react\": \"^19\"\n  },\n  \"workspaces\": [\n    \"vendor/@rsk/*\"\n  ]\n}\n"
+        );
+        assert_eq!(
+            strict(&out)["workspaces"],
+            serde_json::json!(["vendor/@rsk/*"])
+        );
+    }
+
+    fn strict(text: &str) -> serde_json::Value {
+        serde_json::from_str(text).unwrap_or_else(|e| panic!("not strict JSON ({e}):\n{text}"))
+    }
+
+    #[test]
+    fn a_member_after_the_last_one_on_one_line() {
+        let out = at_end(
+            "export default { a: 1 }\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+        );
+        assert_eq!(out, "export default { a: 1, b: 2 }\n");
+    }
+
+    #[test]
+    fn a_trailing_comma_the_developer_wrote_stays_the_style() {
+        let out = at_end(
+            "export default {\n  a: 1,\n}\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+        );
+        assert_eq!(out, "export default {\n  a: 1,\n  b: 2,\n}\n");
+    }
+
+    #[test]
+    fn without_a_trailing_comma_the_old_last_member_gets_the_separator() {
+        let out = at_end(
+            "export default {\n  a: 1\n}\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2"), member("c", "c: 3")],
+        );
+        assert_eq!(out, "export default {\n  a: 1,\n  b: 2,\n  c: 3\n}\n");
+    }
+
+    #[test]
+    fn a_comment_after_the_last_member_stays_on_its_line() {
+        let out = at_end(
+            "export default {\n  a: 1 // one\n}\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+        );
+        assert_eq!(out, "export default {\n  a: 1, // one\n  b: 2\n}\n");
+
+        let out = at_end(
+            "export default {\n  a: 1, // one\n}\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+        );
+        assert_eq!(out, "export default {\n  a: 1, // one\n  b: 2,\n}\n");
+    }
+
+    #[test]
+    fn elements_go_after_the_last_one() {
+        let out = at_end(
+            "export default { list: [\"a\", \"b\"] }\n",
+            &["list"],
+            Container::Array,
+            vec![member("c", "\"c\"")],
+        );
+        assert_eq!(out, "export default { list: [\"a\", \"b\", \"c\"] }\n");
+
+        let out = at_end(
+            "export default {\n  list: [\n    \"a\",\n  ],\n}\n",
+            &["list"],
+            Container::Array,
+            vec![member("c", "\"c\"")],
+        );
+        assert_eq!(
+            out,
+            "export default {\n  list: [\n    \"a\",\n    \"c\",\n  ],\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_created_level_goes_after_the_existing_members() {
+        let out = at_end(
+            "export default {\n  plugins: [],\n}\n",
+            &["resolve", "alias"],
+            Container::Object,
+            vec![member("a", "a: 1")],
+        );
+        assert_eq!(
+            out,
+            "export default {\n  plugins: [],\n  resolve: {\n    alias: {\n      a: 1,\n    },\n  },\n}\n"
+        );
+    }
+
+    #[test]
+    fn an_empty_container_is_filled_the_usual_way() {
+        let out = at_end(
+            "export default {}\n",
+            &[],
+            Container::Object,
+            vec![member("a", "a: 1")],
+        );
+        assert_eq!(out, "export default { a: 1 }\n");
+    }
+
+    #[test]
+    fn a_member_that_is_there_is_not_added_again_and_placing_twice_changes_nothing() {
+        let src = "export default {\n  a: 1,\n}\n";
+        let once = at_end(src, &[], Container::Object, vec![member("b", "b: 2")]);
+        assert_eq!(
+            at_end(&once, &[], Container::Object, vec![member("b", "b: 9")]),
+            once
+        );
+    }
+
+    #[test]
+    fn crlf_files_stay_crlf() {
+        let out = at_end(
+            "export default {\r\n  a: 1\r\n}\r\n",
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+        );
+        assert_eq!(out, "export default {\r\n  a: 1,\r\n  b: 2\r\n}\r\n");
+    }
+
+    #[test]
+    fn non_ascii_text_before_and_inside_does_not_move_it() {
+        let src = format!("// {FA} {ASTRAL}\nexport default {{\n  a: \"{FA}\" // {ZWNJ}\n}}\n");
+        let out = at_end(&src, &[], Container::Object, vec![member("b", "b: 2")]);
+        assert_eq!(
+            out,
+            format!("// {FA} {ASTRAL}\nexport default {{\n  a: \"{FA}\", // {ZWNJ}\n  b: 2\n}}\n")
+        );
     }
 }
 

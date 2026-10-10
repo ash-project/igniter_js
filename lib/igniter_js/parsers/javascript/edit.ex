@@ -76,6 +76,10 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       not exist are created.
     * `:mode` — `:add` (default) leaves a member that is already there alone, so the developer's
       value wins; `:set` replaces it.
+    * `:at` — `:head` (default) puts new members before the existing ones; `:end` puts them
+      after, the way a person adds one. `:end` keeps a trailing comma the developer wrote, and
+      adds the separating comma itself when there is none; a comment after the old last member
+      stays on its line. An empty container is filled either way.
     * `:dialect` — see the module docs.
 
   ```elixir
@@ -131,6 +135,14 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
   }
   ```
 
+  `at: :end` for `package.json`, where `workspaces` belongs after the other keys:
+
+  ```elixir
+  Edit.merge_array_members(~s({\n  "name": "app"\n}\n), :document, ["vendor/@rsk/*"],
+    path: ["workspaces"], at: :end, dialect: :json)
+  #=> {:ok, :merge_array_members, ~s({\n  "name": "app",\n  "workspaces": [\n    "vendor/@rsk/*"\n  ]\n}\n)}
+  ```
+
   A JSON document, with its key order and indentation kept:
 
   ```elixir
@@ -147,7 +159,8 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       path: Keyword.get(opts, :path, []),
       container: "object",
       members: encode_members(members),
-      mode: Keyword.get(opts, :mode, :add)
+      mode: Keyword.get(opts, :mode, :add),
+      at: Keyword.get(opts, :at, :head)
     })
   end
 
@@ -176,7 +189,8 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       path: Keyword.get(opts, :path, []),
       container: "array",
       members: Enum.map(items, &%{key: &1, code: Jason.encode!(&1)}),
-      mode: Keyword.get(opts, :mode, :add)
+      mode: Keyword.get(opts, :mode, :add),
+      at: Keyword.get(opts, :at, :head)
     })
   end
 

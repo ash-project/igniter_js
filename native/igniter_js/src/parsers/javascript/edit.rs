@@ -95,6 +95,18 @@ pub enum Mode {
     Set,
 }
 
+/// Where new members go in a container that already has some.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Placement {
+    /// Before the existing members. The default: it never has to reason about the last member's
+    /// comma, which differs per project and per formatter.
+    #[default]
+    Head,
+    /// After the existing members, the way a person adds one — `package.json`'s `workspaces`.
+    End,
+}
+
 /// A member to put in an object or array.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Member {
@@ -127,6 +139,8 @@ pub enum Request {
         members: Vec<Member>,
         #[serde(default)]
         mode: Mode,
+        #[serde(default)]
+        at: Placement,
     },
     WrapJsx {
         element: String,
@@ -707,7 +721,8 @@ pub fn edit(source: &str, dialect: &str, request: &Request) -> Result<String, St
             container,
             members,
             mode,
-        } => merge_members(&doc, target, path, *container, members, *mode)?,
+            at,
+        } => merge_members(&doc, target, path, *container, members, *mode, *at)?,
         Request::WrapJsx {
             element,
             wrapper,
@@ -826,6 +841,7 @@ fn merge_members(
     container: Container,
     members: &[Member],
     mode: Mode,
+    at: Placement,
 ) -> Result<Vec<Edit>, String> {
     let root = resolve(doc, target)?;
     let (cont, rest) = descend(&root, path)?;
@@ -840,7 +856,7 @@ fn merge_members(
                 }
             ));
         }
-        return Ok(fill(doc, cont, members, mode));
+        return Ok(fill(doc, cont, members, mode, at));
     }
 
     // Levels are missing: write the whole nest at the head of the deepest container that exists.
@@ -848,6 +864,9 @@ fn merge_members(
     let mut block = nest(rest, container, members, json);
     // The comma that separates the new level from what follows it — only when something does,
     // or when the language allows a trailing one.
+    if at == Placement::End && !cont.members.is_empty() {
+        return Ok(insert_at_end(doc, cont, &[block]));
+    }
     if !json || !cont.members.is_empty() {
         block.push(',');
     }
@@ -855,7 +874,7 @@ fn merge_members(
 }
 
 /// Members into a container that exists.
-fn fill(doc: &Doc, cont: &Cont, members: &[Member], mode: Mode) -> Vec<Edit> {
+fn fill(doc: &Doc, cont: &Cont, members: &[Member], mode: Mode, at: Placement) -> Vec<Edit> {
     let mut edits = Vec::new();
     let mut missing: Vec<&Member> = Vec::new();
 
@@ -882,8 +901,87 @@ fn fill(doc: &Doc, cont: &Cont, members: &[Member], mode: Mode) -> Vec<Edit> {
     }
 
     if !missing.is_empty() {
-        edits.push(insert_members(doc, cont, &missing));
+        if at == Placement::End && !cont.members.is_empty() {
+            let codes: Vec<String> = missing.iter().map(|m| m.code.clone()).collect();
+            edits.extend(insert_at_end(doc, cont, &codes));
+        } else {
+            edits.push(insert_members(doc, cont, &missing));
+        }
     }
+    edits
+}
+
+/// Add members after the existing ones, in the layout the container already has.
+///
+/// A trailing comma the developer wrote is kept as the style (and the new last member gets one);
+/// without one, the old last member gets the comma that now separates it and the new last member
+/// has none. A comment after the old last member stays on its line — the new member goes on the
+/// line after it.
+fn insert_at_end(doc: &Doc, cont: &Cont, codes: &[String]) -> Vec<Edit> {
+    let Some(last) = cont.members.last() else {
+        return Vec::new();
+    };
+
+    let after = &doc.text[last.end..cont.close];
+    let gap = after.len() - after.trim_start().len();
+    let trailing_comma = after[gap..].starts_with(',');
+    let comma_end = if trailing_comma {
+        last.end + gap + 1
+    } else {
+        last.end
+    };
+
+    if !doc.text[cont.open..cont.close].contains('\n') {
+        // On one line: `{ a }` becomes `{ a, b }`, and `{ a, }` becomes `{ a, b, }`.
+        let joined = codes.join(", ");
+        return if trailing_comma {
+            vec![Edit {
+                start: comma_end,
+                end: comma_end,
+                text: format!(" {joined},"),
+            }]
+        } else {
+            vec![Edit {
+                start: last.end,
+                end: last.end,
+                text: format!(", {joined}"),
+            }]
+        };
+    }
+
+    let indent = doc.line_indent(last.start).to_string();
+    let mut line_end = doc.text[comma_end..cont.close]
+        .find('\n')
+        .map(|i| comma_end + i)
+        .unwrap_or(cont.close);
+    // Before the `\r` of a CRLF line break, not between it and the `\n`.
+    if doc.text[..line_end].ends_with('\r') {
+        line_end -= 1;
+    }
+
+    let mut text = String::new();
+    for (i, code) in codes.iter().enumerate() {
+        text.push('\n');
+        text.push_str(&indent);
+        text.push_str(&code.replace('\n', &format!("\n{indent}")));
+        if i + 1 < codes.len() || trailing_comma {
+            text.push(',');
+        }
+    }
+
+    let mut edits = Vec::new();
+    if !trailing_comma {
+        edits.push(Edit {
+            start: last.end,
+            end: last.end,
+            text: ",".to_string(),
+        });
+    }
+    edits.push(Edit {
+        start: line_end,
+        end: line_end,
+        text,
+    });
     edits
 }
 

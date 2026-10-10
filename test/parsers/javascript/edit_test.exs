@@ -156,6 +156,44 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
     end
   end
 
+  describe "at: :end" do
+    test "package.json gets workspaces after the other keys, as strict JSON" do
+      source = ~s({\n  "name": "app",\n  "private": true\n}\n)
+
+      assert {:ok, _, out} =
+               Edit.merge_array_members(source, :document, ["vendor/@rsk/*"],
+                 path: ["workspaces"],
+                 at: :end,
+                 dialect: :json
+               )
+
+      assert out ==
+               ~s({\n  "name": "app",\n  "private": true,\n  "workspaces": [\n    "vendor/@rsk/*"\n  ]\n}\n)
+
+      assert Jason.decode!(out)["workspaces"] == ["vendor/@rsk/*"]
+    end
+
+    test "members go after the last one and the developer's trailing comma stays" do
+      assert {:ok, _, "export default {\n  a: 1,\n  b: 2,\n}\n"} =
+               Edit.merge_object_members(
+                 "export default {\n  a: 1,\n}\n",
+                 :default_export,
+                 [{"b", "b: 2"}],
+                 at: :end,
+                 dialect: :ts
+               )
+    end
+
+    test "it is idempotent" do
+      args = [:default_export, [{"b", "b: 2"}], [at: :end, dialect: :ts]]
+
+      {:ok, _, once} =
+        apply(Edit, :merge_object_members, ["export default {\n  a: 1\n}\n" | args])
+
+      assert {:ok, _, ^once} = apply(Edit, :merge_object_members, [once | args])
+    end
+  end
+
   describe "merge_array_members/4" do
     test "adds to a JSON array and skips what is there" do
       source = ~s({\n  "workspaces": ["apps/*"]\n}\n)
