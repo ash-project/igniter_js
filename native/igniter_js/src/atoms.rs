@@ -28,5 +28,7 @@ rustler::atoms! {
     convert_ast_to_estree_nif,
     insert_ast_at_index_nif,
     replace_ast_at_index_nif,
+    edit_source_nif,
+    query_source_nif,
     // Resource Atoms
 }

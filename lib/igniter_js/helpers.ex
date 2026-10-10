@@ -10,6 +10,10 @@ defmodule IgniterJs.Helpers do
   given file path or content.
   """
 
+  # What `:path` mode will read. Once only `.js` and `.ts`; the dialects have been supported for a
+  # while, and the in-place edits work on JSON, so the rest are accepted too.
+  @readable_extensions ~w(.js .mjs .cjs .jsx .ts .mts .cts .tsx .json .jsonc)
+
   @doc """
   Normalize the output of the NIFs. It is a macro and returns a tuple with the first
   element as the output, the second element as the caller function name, and the
@@ -29,7 +33,7 @@ defmodule IgniterJs.Helpers do
 
   @doc """
   Read and validate the file. It returns the file content if the file exists and the
-  extension is `.js` or `.ts`, otherwise, it returns an error tuple.
+  extension is a JavaScript, TypeScript or JSON one, otherwise, it returns an error tuple.
 
   ```elixir
   read_and_validate_file("/path/to/file.js")
@@ -38,7 +42,7 @@ defmodule IgniterJs.Helpers do
   # sobelow_skip ["Traversal.FileModule"]
   def read_and_validate_file(file_path) do
     with true <- File.exists?(file_path),
-         true <- Path.extname(file_path) in [".js", ".ts"],
+         true <- Path.extname(file_path) in @readable_extensions,
          {:ok, file_content} <- File.read(file_path) do
       {:ok, file_content}
     else
@@ -115,6 +119,9 @@ defmodule IgniterJs.Helpers do
       iex> IgniterJs.Helpers.dialect_of_path("vite.config.ts")
       "ts"
 
+      iex> IgniterJs.Helpers.dialect_of_path("package.json")
+      "json"
+
       iex> IgniterJs.Helpers.dialect_of_path("Makefile")
       "js"
   """
@@ -124,6 +131,7 @@ defmodule IgniterJs.Helpers do
       ext when ext in [".ts", ".mts", ".cts"] -> "ts"
       ".tsx" -> "tsx"
       ".jsx" -> "jsx"
+      ext when ext in [".json", ".jsonc"] -> "json"
       _ -> "js"
     end
   end

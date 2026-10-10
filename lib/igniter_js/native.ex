@@ -71,5 +71,9 @@ defmodule IgniterJs.Native do
 
   def is_css_formatted_nif(_file_content), do: error()
 
+  def edit_source_nif(_file_content, _dialect, _request), do: error()
+
+  def query_source_nif(_file_content, _dialect, _request), do: error()
+
   defp error, do: :erlang.nif_error(:nif_not_loaded)
 end
