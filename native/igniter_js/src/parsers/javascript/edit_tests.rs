@@ -965,7 +965,7 @@ mod non_ascii {
         let out = ensure(&src, "m", &["b"]);
         assert_eq!(
             out,
-            format!("// {FA}\nimport {{ b, a }} from \"m\"\nconst x = \"{ASTRAL}\"\n")
+            format!("// {FA}\nimport {{ a, b }} from \"m\"\nconst x = \"{ASTRAL}\"\n")
         );
         let out = ensure(&src, "n", &["c"]);
         assert_eq!(out, format!("// {FA}\nimport {{ a }} from \"m\"\nimport {{ c }} from \"n\"\nconst x = \"{ASTRAL}\"\n"));
@@ -1215,7 +1215,7 @@ mod imports {
     fn into_braces_that_already_hold_names() {
         assert_eq!(
             ensure("import { a } from \"m\"\n", "m", &["b"]),
-            "import { b, a } from \"m\"\n"
+            "import { a, b } from \"m\"\n"
         );
     }
 
@@ -1229,7 +1229,7 @@ mod imports {
     fn only_the_missing_names_are_added() {
         assert_eq!(
             ensure("import { a } from \"m\"\n", "m", &["a", "b"]),
-            "import { b, a } from \"m\"\n"
+            "import { a, b } from \"m\"\n"
         );
     }
 
@@ -1331,7 +1331,7 @@ mod imports {
         let src = "import { a, b } from \"x\"\nimport { c } from \"y\"\n";
         assert_eq!(
             move_to(src, "x", "y", &["b"]),
-            "import { a } from \"x\"\nimport { b, c } from \"y\"\n"
+            "import { a } from \"x\"\nimport { c, b } from \"y\"\n"
         );
     }
 

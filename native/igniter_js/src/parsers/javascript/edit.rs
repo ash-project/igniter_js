@@ -1239,8 +1239,8 @@ enum Wanted {
 ///
 /// * **Already imported** — every name it brings is already imported from that module: nothing is
 ///   written. Importing something twice is not harmless, it is bad code, so this is not an option.
-/// * **The module is imported, with other names** — the new names are added to that import's
-///   braces (or after its default name), so the file never ends up with two imports of one
+/// * **The module is imported, with other names** — the new names are added at the end of that
+///   import's braces (or after its default name), so the file never ends up with two imports of one
 ///   module.
 /// * **Otherwise** — a new line after the last import (after any `"use strict"` directive when
 ///   there is none), in the quote and semicolon style the file's imports already use.
@@ -1318,23 +1318,7 @@ fn insert_one(text: &str, dialect: &str, wanted: &Wanted) -> Result<String, Inse
                         .filter(|n| !have.contains(&n.local.as_str()))
                         .map(|n| n.text.as_str())
                         .collect();
-                    let joined = add.join(", ");
-                    let edit = match target.named.first() {
-                        Some(first) => Edit {
-                            start: first.start,
-                            end: first.start,
-                            text: format!("{joined}, "),
-                        },
-                        None => {
-                            let (open, close) = target.braces.unwrap_or((0, 0));
-                            Edit {
-                                start: open,
-                                end: close,
-                                text: format!(" {joined} "),
-                            }
-                        }
-                    };
-                    return Ok(apply(text, vec![edit]));
+                    return Ok(apply(text, vec![append_names(&doc, target, &add)]));
                 }
             }
 
@@ -1605,6 +1589,43 @@ fn fill_named(info: &mut ImportInfo, specifiers: &JsNamedImportSpecifiers, text:
     }
 }
 
+/// Add names to the end of an import's braces, in the layout the braces already have.
+///
+/// At the end, because that is where a person adds one: `{ a }` plus `b` reads `{ a, b }`, two
+/// names asked for in an order come out in that order, and in a diff the line only gains
+/// `, b`. A list written one name per line gets the new name on its own line with the same
+/// indent, and a trailing comma the developer wrote is left where it was.
+fn append_names(doc: &Doc, target: &ImportInfo, texts: &[&str]) -> Edit {
+    match target.named.last() {
+        Some(last) => {
+            let first = &target.named[0];
+            let multiline = doc.text[first.start..last.end].contains('\n');
+            let text = if multiline {
+                let indent = doc.line_indent(last.start);
+                texts
+                    .iter()
+                    .map(|t| format!(",\n{indent}{t}"))
+                    .collect::<String>()
+            } else {
+                texts.iter().map(|t| format!(", {t}")).collect::<String>()
+            };
+            Edit {
+                start: last.end,
+                end: last.end,
+                text,
+            }
+        }
+        None => {
+            let (open, close) = target.braces.unwrap_or((0, 0));
+            Edit {
+                start: open,
+                end: close,
+                text: format!(" {} ", texts.join(", ")),
+            }
+        }
+    }
+}
+
 fn ensure_imports(doc: &Doc, module: &str, names: &[String]) -> Result<Vec<Edit>, String> {
     let all = imports(doc)?;
     let from_module: Vec<&ImportInfo> = all
@@ -1626,22 +1647,9 @@ fn ensure_imports(doc: &Doc, module: &str, names: &[String]) -> Result<Vec<Edit>
     }
     let joined = missing.join(", ");
 
-    // Into braces that already hold something.
-    if let Some(first) = from_module.iter().find_map(|i| i.named.first()) {
-        return Ok(vec![Edit {
-            start: first.start,
-            end: first.start,
-            text: format!("{joined}, "),
-        }]);
-    }
-
-    // Into empty braces.
-    if let Some((open, close)) = from_module.iter().find_map(|i| i.braces) {
-        return Ok(vec![Edit {
-            start: open,
-            end: close,
-            text: format!(" {joined} "),
-        }]);
+    // Into braces: after the last name, or into empty braces.
+    if let Some(target) = from_module.iter().find(|i| i.braces.is_some()) {
+        return Ok(vec![append_names(doc, target, &missing)]);
     }
 
     // An import with only a default: `import React from "react"` → `import React, { x } from …`.

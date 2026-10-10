@@ -287,13 +287,13 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
   @doc """
   Make sure `names` are imported from `module`.
 
-  A name that is already imported is not added again. The new name goes into the braces of an
+  A name that is already imported is not added again. The new name goes at the end of the braces of an
   existing import from that module, next to a default import, or on a new line after the last
   import — in the quote and semicolon style the file already uses.
 
   ```elixir
   Edit.ensure_imports(~s(import { createRsk } from "@rsk/core"\\n), "@rsk/core", ["i18nPreset"], dialect: :ts)
-  #=> {:ok, :ensure_imports, ~s(import { i18nPreset, createRsk } from "@rsk/core"\\n)}
+  #=> {:ok, :ensure_imports, ~s(import { createRsk, i18nPreset } from "@rsk/core"\\n)}
 
   Edit.ensure_imports("import a from 'a'\\n", "m", ["n"], dialect: :ts)
   #=> {:ok, :ensure_imports, "import a from 'a'\\nimport { n } from 'm'\\n"}

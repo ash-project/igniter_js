@@ -1330,6 +1330,58 @@ mod tests {
         // ── what is already imported is not imported again ──
 
         #[test]
+        fn names_asked_in_one_call_come_out_in_that_order() {
+            assert_eq!(
+                add_lines(
+                    "const x = 1\n",
+                    "import { a } from \"A\"\nimport { b } from \"A\"\nimport { c } from \"A\""
+                ),
+                "import { a, b, c } from \"A\"\nconst x = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_list_written_one_name_per_line_gets_the_new_name_on_its_own_line() {
+            assert_eq!(
+                add_lines(
+                    "import {\n  a,\n  b,\n} from \"m\"\n\nconst q = 1\n",
+                    "import { c } from \"m\""
+                ),
+                "import {\n  a,\n  b,\n  c,\n} from \"m\"\n\nconst q = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_list_without_a_trailing_comma_stays_without_one() {
+            assert_eq!(
+                add_lines(
+                    "import {\n    a,\n    b\n} from \"m\"\n",
+                    "import { c, d } from \"m\""
+                ),
+                "import {\n    a,\n    b,\n    c,\n    d\n} from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn an_inline_trailing_comma_is_left_where_it_was() {
+            assert_eq!(
+                add_lines("import { a, } from \"m\"\n", "import { b } from \"m\""),
+                "import { a, b, } from \"m\"\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_between_the_names_stays_put() {
+            assert_eq!(
+                add_lines(
+                    "import {\n  a, // first\n  b, // second\n} from \"m\"\n",
+                    "import { c } from \"m\""
+                ),
+                "import {\n  a, // first\n  b,\n  c, // second\n} from \"m\"\n"
+            );
+        }
+
+        #[test]
         fn an_import_that_is_already_there_changes_nothing() {
             let src = "import { createRsk } from \"@rsk/core\";\n";
             assert_eq!(
@@ -1353,7 +1405,7 @@ mod tests {
             let src = "import { createRsk } from \"@rsk/core\";\n";
             assert_eq!(
                 add_lines(src, "import { i18nPreset } from \"@rsk/core\""),
-                "import { i18nPreset, createRsk } from \"@rsk/core\";\n"
+                "import { createRsk, i18nPreset } from \"@rsk/core\";\n"
             );
         }
 
@@ -1362,7 +1414,7 @@ mod tests {
             let src = "import { a } from \"m\"\n";
             assert_eq!(
                 add_lines(src, "import { a, b, c } from \"m\""),
-                "import { b, c, a } from \"m\"\n"
+                "import { a, b, c } from \"m\"\n"
             );
         }
 
@@ -1371,7 +1423,7 @@ mod tests {
             let src = "import { x } from 'backpex'\n";
             assert_eq!(
                 add_lines(src, "import { Hooks as BackpexHooks } from 'backpex'"),
-                "import { Hooks as BackpexHooks, x } from 'backpex'\n"
+                "import { x, Hooks as BackpexHooks } from 'backpex'\n"
             );
         }
 

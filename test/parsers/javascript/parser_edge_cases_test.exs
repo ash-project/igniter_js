@@ -350,7 +350,7 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserEdgeCasesTest do
                  dialect: :ts
                )
 
-      assert out =~ ~s|import { i18nPreset, createRsk } from "@rsk/core" // core|
+      assert out =~ ~s|import { createRsk, i18nPreset } from "@rsk/core" // core|
       assert length(String.split(out, ~s|from "@rsk/core"|)) == 2
     end
 
@@ -416,6 +416,33 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserEdgeCasesTest do
                  :content,
                  dialect: :ts
                )
+    end
+
+    test "new names go at the end, in the order they were asked for" do
+      assert {:ok, _, "import { a, b, c } from \"A\"\nconst x = 1\n"} =
+               Parser.insert_imports(
+                 "const x = 1\n",
+                 ~s|import { a } from "A"\nimport { b } from "A"\nimport { c } from "A"|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "a list written one name per line gets the new name on its own line" do
+      assert {:ok, _, "import {\n  a,\n  b,\n  c,\n} from \"m\"\n"} =
+               Parser.insert_imports(
+                 "import {\n  a,\n  b,\n} from \"m\"\n",
+                 ~s|import { c } from "m"|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "names bound across separate import lines are all found" do
+      source = "import { a } from \"A\"\nimport { b } from \"A\"\n"
+
+      assert {:ok, _, ^source} =
+               Parser.insert_imports(source, ~s|import { a, b } from "A"|, :content, dialect: :ts)
     end
 
     test "statements that do not parse are an error, as before" do

@@ -266,7 +266,7 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
 
   describe "imports" do
     test "ensure_imports goes into existing braces" do
-      assert {:ok, :ensure_imports, ~s(import { i18nPreset, createRsk } from "@rsk/core"\n)} =
+      assert {:ok, :ensure_imports, ~s(import { createRsk, i18nPreset } from "@rsk/core"\n)} =
                Edit.ensure_imports(
                  ~s(import { createRsk } from "@rsk/core"\n),
                  "@rsk/core",
@@ -407,7 +407,7 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
     test "imports" do
       source = "// #{@fa}\nimport { a } from \"m\"\nconst x = \"#{@emoji}\"\n"
 
-      assert {:ok, _, "// #{@fa}\nimport { b, a } from \"m\"\nconst x = \"#{@emoji}\"\n"} =
+      assert {:ok, _, "// #{@fa}\nimport { a, b } from \"m\"\nconst x = \"#{@emoji}\"\n"} =
                Edit.ensure_imports(source, "m", ["b"], dialect: :ts)
     end
   end

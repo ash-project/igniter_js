@@ -103,9 +103,9 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
 
     * every name it brings is **already imported** from that module (in one import or split
       across several): nothing is written and the file is returned untouched
-    * the module is imported but **with other names**: the new names are added to that import
-      (`import { createRsk } from "@rsk/core"` plus `import { i18nPreset } from "@rsk/core"`
-      gives `import { i18nPreset, createRsk } from "@rsk/core"`), or after its default name
+    * the module is imported but **with other names**: the new names are added at the end of
+      that import (`import { createRsk } from "@rsk/core"` plus `import { i18nPreset } from "@rsk/core"`
+      gives `import { createRsk, i18nPreset } from "@rsk/core"`), or after its default name
       (`import React, { useState } from "react"`), never a second line for the same module
     * otherwise a new line after the last import — or after a `"use strict"` directive or `#!`
       line when the file has no imports yet
