@@ -394,6 +394,25 @@ mod objects {
     }
 
     #[test]
+    fn a_parse_error_says_which_line_and_what() {
+        let err = merge_with(
+            "ts",
+            "const a = 1\nconst t = { a: \n",
+            var("t"),
+            &[],
+            Container::Object,
+            vec![member("b", "b: 2")],
+            Mode::Add,
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("could not parse the source: line "),
+            "{err}"
+        );
+        assert!(!err.contains("ParseDiagnostic"), "{err}");
+    }
+
+    #[test]
     fn an_unknown_dialect_is_an_error() {
         assert!(merge_with(
             "coffee",

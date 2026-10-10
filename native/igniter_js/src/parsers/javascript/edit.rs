@@ -50,6 +50,7 @@ use biome_js_syntax::{
 };
 use biome_json_parser::{parse_json, JsonParserOptions};
 use biome_json_syntax::{AnyJsonValue, JsonArrayValue, JsonObjectValue};
+use biome_parser::diagnostic::ParseDiagnostic;
 use biome_rowan::{AstNode, AstNodeList, AstSeparatedList, TextRange};
 use serde::Deserialize;
 
@@ -196,7 +197,7 @@ impl Doc {
                     .with_allow_trailing_commas(),
             );
             if parsed.has_errors() {
-                return Err(first_error(parsed.diagnostics().first()));
+                return Err(first_error(&text, parsed.diagnostics().first()));
             }
             return Ok(Doc {
                 tree: Tree::Json(parsed.syntax()),
@@ -207,7 +208,7 @@ impl Doc {
         let dialect = Dialect::from_name(dialect)?;
         let parsed = parse(&text, dialect.biome_source(), JsParserOptions::default());
         if parsed.has_errors() {
-            return Err(first_error(parsed.diagnostics().first()));
+            return Err(first_error(&text, parsed.diagnostics().first()));
         }
         Ok(Doc {
             tree: Tree::Js(parsed.syntax()),
@@ -241,9 +242,31 @@ impl Doc {
     }
 }
 
-fn first_error<D: std::fmt::Debug>(diagnostic: Option<&D>) -> String {
+/// The first thing wrong with a source, in words: `line 3: expected an expression`.
+fn first_error(text: &str, diagnostic: Option<&ParseDiagnostic>) -> String {
+    use biome_diagnostics::Diagnostic;
+
+    struct Words<'a>(&'a ParseDiagnostic);
+
+    impl std::fmt::Display for Words<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.description(f)
+        }
+    }
+
     match diagnostic {
-        Some(d) => format!("could not parse the source: {d:?}"),
+        Some(d) => {
+            let line = d.location().span.map(|span| {
+                text[..usize::from(span.start()).min(text.len())]
+                    .matches('\n')
+                    .count()
+                    + 1
+            });
+            match line {
+                Some(line) => format!("could not parse the source: line {line}: {}", Words(d)),
+                None => format!("could not parse the source: {}", Words(d)),
+            }
+        }
         None => "could not parse the source".to_string(),
     }
 }
