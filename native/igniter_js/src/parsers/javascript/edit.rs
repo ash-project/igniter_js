@@ -44,7 +44,7 @@ use biome_js_syntax::{
     AnyJsArrayElement, AnyJsCombinedSpecifier, AnyJsExpression, AnyJsFunctionBody,
     AnyJsImportClause, AnyJsNamedImportSpecifier, AnyJsObjectMember, AnyJsObjectMemberName,
     AnyJsStatement, AnyJsxAttribute, AnyJsxChild, JsArrayExpression, JsCallExpression,
-    JsExportDefaultExpressionClause, JsFunctionBody, JsImport, JsNamedImportSpecifiers,
+    JsExportDefaultExpressionClause, JsFunctionBody, JsImport, JsModule, JsNamedImportSpecifiers,
     JsObjectExpression, JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator, JsxElement,
     JsxSelfClosingElement,
 };
@@ -1214,16 +1214,245 @@ fn add_jsx_props(
     Ok(edits)
 }
 
+// ── inserting whole import statements ───────────────────────────────────────
+
+/// Why an insert could not be made.
+#[derive(Debug, PartialEq, Eq)]
+pub enum InsertError {
+    /// The statements to insert do not parse.
+    Argument,
+    /// The file does not parse.
+    Source(String),
+}
+
+/// What a caller asked to be inserted.
+enum Wanted {
+    Import(Box<ImportInfo>),
+    /// Anything that is not an import, as written. Inserted as it is, never deduplicated.
+    Other(String),
+}
+
+/// Insert whole import statements into a file, leaving the rest of it exactly as written.
+///
+/// The statements are what a caller would write — `import { z } from "zod"`, several of them if
+/// they are separated by line breaks — and each one is dealt with on its own:
+///
+/// * **Already imported** — every name it brings is already imported from that module: nothing is
+///   written. Importing something twice is not harmless, it is bad code, so this is not an option.
+/// * **The module is imported, with other names** — the new names are added to that import's
+///   braces (or after its default name), so the file never ends up with two imports of one
+///   module.
+/// * **Otherwise** — a new line after the last import (after any `"use strict"` directive when
+///   there is none), in the quote and semicolon style the file's imports already use.
+///
+/// A type-only import is only compared with type-only imports, and a bare `import "m"` counts as
+/// already imported when the module is imported in any form.
+pub fn insert_imports(source: &str, dialect: &str, lines: &str) -> Result<String, InsertError> {
+    let wanted = wanted_statements(lines, dialect)?;
+    let mut text = source.to_string();
+    for item in wanted {
+        text = insert_one(&text, dialect, &item)?;
+    }
+    Ok(text)
+}
+
+fn wanted_statements(lines: &str, dialect: &str) -> Result<Vec<Wanted>, InsertError> {
+    let doc = Doc::parse(lines, dialect).map_err(|_| InsertError::Argument)?;
+    let root = doc.js().map_err(|_| InsertError::Argument)?;
+    let module = JsModule::cast(root.clone()).ok_or(InsertError::Argument)?;
+    let mut infos = imports(&doc)
+        .map_err(|_| InsertError::Argument)?
+        .into_iter();
+
+    Ok(module
+        .items()
+        .iter()
+        .filter_map(|item| match item {
+            biome_js_syntax::AnyJsModuleItem::JsImport(_) => {
+                infos.next().map(|i| Wanted::Import(Box::new(i)))
+            }
+            other => Some(Wanted::Other(other.syntax().text_trimmed().to_string())),
+        })
+        .collect())
+}
+
+fn bindings(import: &ImportInfo) -> Vec<&str> {
+    import
+        .default_local
+        .iter()
+        .chain(import.namespace_local.iter())
+        .map(String::as_str)
+        .chain(import.named.iter().map(|n| n.local.as_str()))
+        .collect()
+}
+
+fn insert_one(text: &str, dialect: &str, wanted: &Wanted) -> Result<String, InsertError> {
+    let doc = Doc::parse(text, dialect).map_err(InsertError::Source)?;
+    let all = imports(&doc).map_err(InsertError::Source)?;
+
+    let statement = match wanted {
+        Wanted::Other(code) => code.clone(),
+        Wanted::Import(import) => {
+            let same: Vec<&ImportInfo> = all
+                .iter()
+                .filter(|i| i.module == import.module && i.type_only == import.type_only)
+                .collect();
+            let have: Vec<&str> = same.iter().flat_map(|i| bindings(i)).collect();
+            let asked = bindings(import);
+
+            // Nothing to bind: only the module's presence matters.
+            if asked.is_empty() && !same.is_empty() {
+                return Ok(text.to_string());
+            }
+            if !asked.is_empty() && asked.iter().all(|b| have.contains(b)) {
+                return Ok(text.to_string());
+            }
+
+            // The module is imported already: bring the new names into its braces.
+            let plain = import.default_local.is_none() && import.namespace_local.is_none();
+            if plain {
+                if let Some(target) = same.iter().find(|i| i.braces.is_some()) {
+                    let add: Vec<&str> = import
+                        .named
+                        .iter()
+                        .filter(|n| !have.contains(&n.local.as_str()))
+                        .map(|n| n.text.as_str())
+                        .collect();
+                    let joined = add.join(", ");
+                    let edit = match target.named.first() {
+                        Some(first) => Edit {
+                            start: first.start,
+                            end: first.start,
+                            text: format!("{joined}, "),
+                        },
+                        None => {
+                            let (open, close) = target.braces.unwrap_or((0, 0));
+                            Edit {
+                                start: open,
+                                end: close,
+                                text: format!(" {joined} "),
+                            }
+                        }
+                    };
+                    return Ok(apply(text, vec![edit]));
+                }
+            }
+
+            // Only a default import so far: `import A from "m"` becomes `import A, { x } from "m"`.
+            if plain {
+                if let Some(default) = same
+                    .iter()
+                    .find(|i| i.braces.is_none() && !i.namespace)
+                    .and_then(|i| i.default)
+                {
+                    let add: Vec<&str> = import
+                        .named
+                        .iter()
+                        .filter(|n| !have.contains(&n.local.as_str()))
+                        .map(|n| n.text.as_str())
+                        .collect();
+                    return Ok(apply(
+                        text,
+                        vec![Edit {
+                            start: default.1,
+                            end: default.1,
+                            text: format!(", {{ {} }}", add.join(", ")),
+                        }],
+                    ));
+                }
+            }
+
+            in_file_style(import, all.last())
+        }
+    };
+
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let edit = match all.last() {
+        Some(last) => Edit {
+            start: last.end,
+            end: last.end,
+            text: format!("{newline}{statement}"),
+        },
+        None => match prologue_end(&doc) {
+            Some(at) => Edit {
+                start: at,
+                end: at,
+                text: format!("{newline}{statement}"),
+            },
+            None => Edit {
+                start: 0,
+                end: 0,
+                text: format!("{statement}{newline}"),
+            },
+        },
+    };
+    Ok(apply(text, vec![edit]))
+}
+
+/// The statement, with its module's quotes and its semicolon the way the file's imports have them.
+///
+/// A file with no imports has no style to follow, so the caller's own is kept.
+fn in_file_style(import: &ImportInfo, last: Option<&ImportInfo>) -> String {
+    let (quote, semicolon) = match last {
+        Some(last) => (last.quote, last.semicolon),
+        None => (import.quote, import.semicolon),
+    };
+
+    let mut statement = import.text.clone();
+    let (from, to) = (
+        import.source_range.0 - import.start,
+        import.source_range.1 - import.start,
+    );
+    let token = &import.text[from..to];
+    let inner = token.trim_matches(|c| c == '"' || c == '\'');
+    if !inner.contains(quote) && inner.len() + 2 == token.len() {
+        statement.replace_range(from..to, &format!("{quote}{inner}{quote}"));
+    }
+
+    let bare = statement.trim_end().trim_end_matches(';').to_string();
+    if semicolon {
+        format!("{bare};")
+    } else {
+        bare
+    }
+}
+
+/// Where a new first import goes: after a `#!` line and after `"use strict"`-style directives,
+/// which only mean anything while they come first.
+fn prologue_end(doc: &Doc) -> Option<usize> {
+    let module = JsModule::cast(doc.js().ok()?.clone())?;
+    let interpreter = module
+        .interpreter_token()
+        .map(|t| usize::from(t.text_trimmed_range().end()));
+    let directive = module
+        .directives()
+        .iter()
+        .last()
+        .map(|d| trimmed(d.syntax()).1);
+    interpreter.max(directive)
+}
+
 // ── imports ─────────────────────────────────────────────────────────────────
 
 struct Spec {
+    /// The imported name, before any `as`.
     name: String,
+    /// The name it is bound to in this file.
+    local: String,
+    /// The specifier as written: `Hooks as BackpexHooks`.
+    text: String,
     start: usize,
     end: usize,
 }
 
 struct ImportInfo {
     module: String,
+    /// The whole statement as written, comments inside it included.
+    text: String,
+    /// Where the module name's string token sits in the file.
+    source_range: (usize, usize),
+    default_local: Option<String>,
+    namespace_local: Option<String>,
     start: usize,
     end: usize,
     quote: char,
@@ -1249,6 +1478,10 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
 
         let mut info = ImportInfo {
             module: String::new(),
+            text: doc.text[start..end].to_string(),
+            source_range: (0, 0),
+            default_local: None,
+            namespace_local: None,
             start,
             end,
             quote: '"',
@@ -1268,17 +1501,27 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
                     .default_specifier()
                     .ok()
                     .map(|d| bytes(d.syntax().text_trimmed_range()));
+                info.default_local = c.default_specifier().ok().and_then(|d| {
+                    d.local_name()
+                        .ok()
+                        .map(|n| n.syntax().text_trimmed().to_string())
+                });
                 c.source().ok()
             }
             AnyJsImportClause::JsImportNamespaceClause(c) => {
                 info.type_only = c.type_token().is_some();
                 info.namespace = true;
+                info.namespace_local = c.namespace_specifier().ok().and_then(|n| {
+                    n.local_name()
+                        .ok()
+                        .map(|n| n.syntax().text_trimmed().to_string())
+                });
                 c.source().ok()
             }
             AnyJsImportClause::JsImportNamedClause(c) => {
                 info.type_only = c.type_token().is_some();
                 if let Ok(specifiers) = c.named_specifiers() {
-                    fill_named(&mut info, &specifiers);
+                    fill_named(&mut info, &specifiers, &doc.text);
                 }
                 c.source().ok()
             }
@@ -1287,12 +1530,21 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
                     .default_specifier()
                     .ok()
                     .map(|d| bytes(d.syntax().text_trimmed_range()));
+                info.default_local = c.default_specifier().ok().and_then(|d| {
+                    d.local_name()
+                        .ok()
+                        .map(|n| n.syntax().text_trimmed().to_string())
+                });
                 match c.specifier() {
                     Ok(AnyJsCombinedSpecifier::JsNamedImportSpecifiers(s)) => {
-                        fill_named(&mut info, &s)
+                        fill_named(&mut info, &s, &doc.text)
                     }
-                    Ok(AnyJsCombinedSpecifier::JsNamespaceImportSpecifier(_)) => {
-                        info.namespace = true
+                    Ok(AnyJsCombinedSpecifier::JsNamespaceImportSpecifier(n)) => {
+                        info.namespace = true;
+                        info.namespace_local = n
+                            .local_name()
+                            .ok()
+                            .map(|n| n.syntax().text_trimmed().to_string());
                     }
                     Err(_) => {}
                 }
@@ -1302,6 +1554,7 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
 
         if let Some(source) = source {
             if let Ok(token) = source.value_token() {
+                info.source_range = bytes(token.text_trimmed_range());
                 let text = token.text_trimmed();
                 info.quote = text.chars().next().filter(|c| *c == '\'').unwrap_or('"');
                 info.module = unquote(text);
@@ -1312,7 +1565,7 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
     Ok(out)
 }
 
-fn fill_named(info: &mut ImportInfo, specifiers: &JsNamedImportSpecifiers) {
+fn fill_named(info: &mut ImportInfo, specifiers: &JsNamedImportSpecifiers, text: &str) {
     if let (Ok(l), Ok(r)) = (specifiers.l_curly_token(), specifiers.r_curly_token()) {
         info.braces = Some((
             usize::from(l.text_trimmed_range().end()),
@@ -1333,8 +1586,21 @@ fn fill_named(info: &mut ImportInfo, specifiers: &JsNamedImportSpecifiers) {
                 .map(|n| n.syntax().text_trimmed().to_string()),
             AnyJsNamedImportSpecifier::JsBogusNamedImportSpecifier(_) => None,
         };
-        if let Some(name) = name {
-            info.named.push(Spec { name, start, end });
+        let local = match &specifier {
+            AnyJsNamedImportSpecifier::JsNamedImportSpecifier(s) => s
+                .local_name()
+                .ok()
+                .map(|n| n.syntax().text_trimmed().to_string()),
+            _ => name.clone(),
+        };
+        if let (Some(name), Some(local)) = (name, local) {
+            info.named.push(Spec {
+                name,
+                local,
+                text: text[start..end].to_string(),
+                start,
+                end,
+            });
         }
     }
 }

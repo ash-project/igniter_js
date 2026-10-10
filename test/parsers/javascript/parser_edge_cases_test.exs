@@ -322,4 +322,105 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserEdgeCasesTest do
       refute output =~ "C"
     end
   end
+
+  describe "insert_imports/4 keeps the file as written" do
+    @fa "\u0633\u0644\u0627\u0645"
+    @emoji "\u{1F9FE}"
+
+    @messy "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n"
+
+    test "a messy file gets one new line and nothing else changes" do
+      assert {:ok, :insert_imports, out} =
+               Parser.insert_imports(@messy, ~s|import { z } from "zod"|, :content, dialect: :ts)
+
+      assert out ==
+               "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\nimport { z } from 'zod'\n\nconst  x = {\n    a: 1,   // one\n}\n"
+    end
+
+    test "an import that is already there is not added, and the file is returned untouched" do
+      assert {:ok, :insert_imports, @messy} =
+               Parser.insert_imports(@messy, ~s|import { createRsk } from "@rsk/core"|, :content,
+                 dialect: :ts
+               )
+    end
+
+    test "new names for a module that is already imported are merged, not repeated" do
+      assert {:ok, :insert_imports, out} =
+               Parser.insert_imports(@messy, ~s|import { i18nPreset } from "@rsk/core"|, :content,
+                 dialect: :ts
+               )
+
+      assert out =~ ~s|import { i18nPreset, createRsk } from "@rsk/core" // core|
+      assert length(String.split(out, ~s|from "@rsk/core"|)) == 2
+    end
+
+    test "inserting the same statements twice is the same as once" do
+      lines = ~s|import { z } from "zod"\nimport y from "why"|
+      {:ok, _, once} = Parser.insert_imports(@messy, lines, :content, dialect: :ts)
+      assert {:ok, _, ^once} = Parser.insert_imports(once, lines, :content, dialect: :ts)
+    end
+
+    test "a file written without semicolons stays without them, and one with them keeps them" do
+      assert {:ok, _, "import a from 'a'\nimport { n } from 'm'\nconst x = 1\n"} =
+               Parser.insert_imports(
+                 "import a from 'a'\nconst x = 1\n",
+                 ~s|import { n } from "m";|,
+                 :content,
+                 dialect: :ts
+               )
+
+      assert {:ok, _, "import a from \"a\";\nimport { n } from \"m\";\nconst x = 1;\n"} =
+               Parser.insert_imports(
+                 "import a from \"a\";\nconst x = 1;\n",
+                 ~s|import { n } from 'm'|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "CRLF files stay CRLF" do
+      assert {:ok, _, "import a from 'a'\r\nimport { n } from 'm'\r\n\r\nconst x = 1\r\n"} =
+               Parser.insert_imports(
+                 "import a from 'a'\r\n\r\nconst x = 1\r\n",
+                 ~s|import { n } from 'm'|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "JSX is not reprinted" do
+      jsx =
+        "import React from 'react'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n"
+
+      assert {:ok, _, out} =
+               Parser.insert_imports(jsx, ~s|import { z } from "zod"|, :content, dialect: :tsx)
+
+      assert out == String.replace(jsx, "\n\nexport", "\nimport { z } from 'zod'\n\nexport")
+    end
+
+    test "right-to-left text and an emoji around the edit are kept as they were" do
+      src = "// #{@fa} #{@emoji}\nimport a from 'a'\n\n/* #{@fa} */\nconst x = \"#{@fa}\"\n"
+
+      assert {:ok, _, out} =
+               Parser.insert_imports(src, ~s|import { z } from "zod"|, :content, dialect: :ts)
+
+      assert out ==
+               "// #{@fa} #{@emoji}\nimport a from 'a'\nimport { z } from 'zod'\n\n/* #{@fa} */\nconst x = \"#{@fa}\"\n"
+    end
+
+    test "a directive stays first" do
+      assert {:ok, _, "'use client'\nimport { z } from \"zod\"\n\nconst x = 1\n"} =
+               Parser.insert_imports(
+                 "'use client'\n\nconst x = 1\n",
+                 ~s|import { z } from "zod"|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "statements that do not parse are an error, as before" do
+      assert {:error, :insert_imports, _} =
+               Parser.insert_imports("const x = 1\n", "../vendor/topbar", :content, dialect: :ts)
+    end
+  end
 end

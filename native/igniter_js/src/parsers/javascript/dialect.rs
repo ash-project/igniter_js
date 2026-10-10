@@ -86,6 +86,16 @@ impl Dialect {
         matches!(self, Dialect::Jsx | Dialect::Tsx)
     }
 
+    /// The name this dialect is asked for by: `"js"`, `"jsx"`, `"ts"` or `"tsx"`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Dialect::Js => "js",
+            Dialect::Jsx => "jsx",
+            Dialect::Ts => "ts",
+            Dialect::Tsx => "tsx",
+        }
+    }
+
     /// The swc parser configuration — used by every codemod in this crate.
     pub fn swc_syntax(self) -> Syntax {
         if self.typescript() {

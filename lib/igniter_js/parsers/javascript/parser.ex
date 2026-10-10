@@ -51,14 +51,77 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   end
 
   @doc """
-  Insert imports to the given file or content and returns tuple.
+  Insert import statements into the given file or content and returns tuple.
+
+  The statements are written the way you would write them — one per line when there are several —
+  and **the rest of the file is returned exactly as it was**: comments, blank lines, indentation,
+  `;` or no `;`, quotes, CRLF line endings and JSX are not touched. Only the new line is added,
+  and it follows the quote and semicolon style of the file's own imports.
 
   ```elixir
   alias IgniterJs.Parsers.Javascript.Parser
   Parser.insert_imports(js_content, imports_lines)
   Parser.insert_imports(js_content, imports_lines, :content)
   Parser.insert_imports("/path/to/file.js", imports_lines, :path)
+  Parser.insert_imports(tsx_content, imports_lines, :content, dialect: :tsx)
   ```
+
+  ```js
+  // in
+  // the app entry
+  import { createRsk } from "@rsk/core" // core
+
+  /* config */
+  import a   from 'a'
+
+  const  x = {
+      a: 1,   // one
+  }
+  ```
+
+  ```elixir
+  Parser.insert_imports(src, ~s(import { z } from "zod"), :content, dialect: :ts)
+  ```
+
+  ```js
+  // out: one new line, everything else byte for byte
+  // the app entry
+  import { createRsk } from "@rsk/core" // core
+
+  /* config */
+  import a   from 'a'
+  import { z } from 'zod'
+
+  const  x = {
+      a: 1,   // one
+  }
+  ```
+
+  ## Nothing is imported twice
+
+  Importing something twice is bad code, so each statement is checked against the file first:
+
+    * every name it brings is **already imported** from that module (in one import or split
+      across several): nothing is written and the file is returned untouched
+    * the module is imported but **with other names**: the new names are added to that import
+      (`import { createRsk } from "@rsk/core"` plus `import { i18nPreset } from "@rsk/core"`
+      gives `import { i18nPreset, createRsk } from "@rsk/core"`), or after its default name
+      (`import React, { useState } from "react"`), never a second line for the same module
+    * otherwise a new line after the last import — or after a `"use strict"` directive or `#!`
+      line when the file has no imports yet
+
+  A type-only import is compared only with type-only imports, and a bare `import "m"` is
+  already satisfied by any import of that module.
+
+  An import written for a name that is `as`-aliased (`Hooks as BackpexHooks`) is added as written.
+
+  ## Compatibility
+
+  Before this version the whole file was parsed and printed again, which added `;` everywhere,
+  removed blank lines, glued comments onto the next line, dropped comments inside objects and
+  turned CRLF into LF. The same call now leaves all of that alone. A file that was already in the
+  old printer's style (`;` after every statement, no blank lines) comes back the same as before,
+  so callers that insert into generated, canonical code see no difference.
   """
   def insert_imports(file_path_or_content, imports_lines, type \\ :content, opts \\ []) do
     call_nif_fn(
