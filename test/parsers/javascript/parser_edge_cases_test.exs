@@ -450,4 +450,93 @@ defmodule IgniterJSTest.Parsers.Javascript.ParserEdgeCasesTest do
                Parser.insert_imports("const x = 1\n", "../vendor/topbar", :content, dialect: :ts)
     end
   end
+
+  describe "remove_imports/4 keeps the file as written" do
+    @messy_remove "import a   from 'a'\nimport b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n"
+
+    test "only the import's own line goes" do
+      assert {:ok, :remove_imports,
+              "import b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n"} =
+               Parser.remove_imports(@messy_remove, "a", :content, dialect: :ts)
+    end
+
+    test "a comment after the import goes with it, a comment above it stays" do
+      assert {:ok, _, "import b from 'b'\n"} =
+               Parser.remove_imports(
+                 "import a from 'a' // the a\nimport b from 'b'\n",
+                 "a",
+                 :content,
+                 dialect: :ts
+               )
+
+      assert {:ok, _, "// topbar\nimport b from 'b'\n"} =
+               Parser.remove_imports(
+                 "// topbar\nimport topbar from 'topbar'\nimport b from 'b'\n",
+                 "topbar",
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "every import of the module goes, whatever it binds" do
+      source =
+        "import { a } from \"m\"\nimport type { T } from \"m\"\nimport \"m\"\nimport k from \"k\"\n"
+
+      assert {:ok, _, "import k from \"k\"\n"} =
+               Parser.remove_imports(source, "m", :content, dialect: :ts)
+    end
+
+    test "modules as statements or one per line" do
+      source = "import a from 'a'\nimport b from 'b'\nimport c from 'c'\n"
+
+      assert {:ok, _, "import b from 'b'\n"} =
+               Parser.remove_imports(source, "a\nc", :content, dialect: :ts)
+
+      assert {:ok, _, "import b from 'b'\n"} =
+               Parser.remove_imports(
+                 source,
+                 ~s|import x from "a";\nimport y from "c";|,
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "a module that is not imported returns the file as it was" do
+      assert {:ok, _, @messy_remove} =
+               Parser.remove_imports(@messy_remove, "zzz", :content, dialect: :ts)
+
+      assert {:ok, _, @messy_remove} =
+               Parser.remove_imports(@messy_remove, "  ", :content, dialect: :ts)
+    end
+
+    test "CRLF files stay CRLF" do
+      assert {:ok, _, "import b from 'b'\r\n\r\nconst x = 1\r\n"} =
+               Parser.remove_imports(
+                 "import a from 'a'\r\nimport b from 'b'\r\n\r\nconst x = 1\r\n",
+                 "a",
+                 :content,
+                 dialect: :ts
+               )
+    end
+
+    test "right-to-left text around the import is kept" do
+      fa = "\u0633\u0644\u0627\u0645"
+      source = "// #{fa}\nimport a from 'a' // #{fa}\n\n/* #{fa} */\nconst x = \"#{fa}\"\n"
+
+      assert {:ok, _, out} = Parser.remove_imports(source, "a", :content, dialect: :ts)
+      assert out == "// #{fa}\n\n/* #{fa} */\nconst x = \"#{fa}\"\n"
+    end
+
+    test "inserting and then removing gives back the file" do
+      {:ok, _, added} =
+        Parser.insert_imports(@messy_remove, ~s|import { z } from "zod"|, :content, dialect: :ts)
+
+      assert {:ok, _, @messy_remove} = Parser.remove_imports(added, "zod", :content, dialect: :ts)
+    end
+
+    test "a file that does not parse is an error" do
+      assert {:error, :remove_imports, _} =
+               Parser.remove_imports("const x = ;;;", "a", :content, dialect: :ts)
+    end
+  end
 end

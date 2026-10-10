@@ -294,26 +294,20 @@ pub fn insert_import_to_ast(
 /// or an error message if parsing fails.
 ///
 /// # Behavior
-/// - Retains all other import statements and code structure.
-/// - Removes only the specified modules from the import declarations.
+/// - Everything else in the file is returned exactly as written: comments, blank lines, spacing,
+///   quotes, `;` or no `;`, line endings.
+/// - Removes every import of the specified modules, whole: its line, a comment after it on that
+///   line, and the line break. A comment on its own line above it is kept.
 pub fn remove_import_from_ast(
     file_content: &str,
     modules: &str,
     dialect: Dialect,
 ) -> Result<String, String> {
-    let mut import_visitor = ASTVisitImport {
-        dialect,
-        code: modules,
-        operation: Operation::Delete,
-        ..Default::default()
-    };
+    use super::edit::{remove_imports, RemoveError};
 
-    let output = code_gen_from_ast_vist_as(file_content, &mut import_visitor, dialect)?;
-
-    match import_visitor.parse_error {
-        Some(error) => Err(error),
-        None => Ok(output),
-    }
+    remove_imports(file_content, dialect.name(), modules).map_err(|error| match error {
+        RemoveError::Source(_) => "Failed to parse JavaScript content".to_string(),
+    })
 }
 
 // ###################################################################################
@@ -1327,6 +1321,26 @@ mod tests {
             );
         }
 
+        #[test]
+        fn a_comment_after_the_last_import_stays_on_its_own_line() {
+            assert_eq!(
+                add("import a from 'a' // keep\n\nconst x = 1\n"),
+                "import a from 'a' // keep\nimport { z } from 'zod'\n\nconst x = 1\n"
+            );
+            assert_eq!(
+                add("import a from 'a'; /* keep */\nconst x = 1;\n"),
+                "import a from 'a'; /* keep */\nimport { z } from 'zod';\nconst x = 1;\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_after_a_directive_stays_on_its_own_line() {
+            assert_eq!(
+                add("'use client' // keep\nconst x = 1\n"),
+                "'use client' // keep\nimport { z } from \"zod\"\nconst x = 1\n"
+            );
+        }
+
         // ── what is already imported is not imported again ──
 
         #[test]
@@ -1511,15 +1525,158 @@ mod tests {
             );
         }
 
-        // Removing is still done the old way; pinned so a change to it is a decision.
+        // ── removing ──
+
+        fn remove(src: &str, modules: &str) -> String {
+            remove_import_from_ast(src, modules, Dialect::Tsx).unwrap()
+        }
+
         #[test]
-        fn removing_an_import_still_reprints_the_rest_of_the_file() {
+        fn removing_an_import_changes_only_its_line() {
             let src = "import a   from 'a'\nimport b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n";
 
             assert_eq!(
-                remove_import_from_ast(src, "a", Dialect::Tsx).unwrap(),
-                "import b from 'b'; // keep\nconst x = {\n    a: 1\n};\n"
+                remove(src, "a"),
+                "import b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n"
             );
+        }
+
+        #[test]
+        fn a_comment_after_the_import_on_its_line_goes_with_it() {
+            assert_eq!(
+                remove("import a from 'a' // the a\nimport b from 'b'\n", "a"),
+                "import b from 'b'\n"
+            );
+            assert_eq!(
+                remove("import a from 'a' /* the a */\nimport b from 'b'\n", "a"),
+                "import b from 'b'\n"
+            );
+        }
+
+        #[test]
+        fn a_comment_on_its_own_line_above_stays() {
+            let src = "/**\n * Copyright\n */\n// topbar\nimport topbar from 'topbar'\nimport b from 'b'\n";
+
+            assert_eq!(
+                remove(src, "topbar"),
+                "/**\n * Copyright\n */\n// topbar\nimport b from 'b'\n"
+            );
+        }
+
+        #[test]
+        fn two_blank_lines_in_a_row_are_not_left_behind() {
+            let src = "import a from 'a'\n\nimport b from 'b'\n\nconst x = 1\n";
+
+            assert_eq!(remove(src, "b"), "import a from 'a'\n\nconst x = 1\n");
+        }
+
+        #[test]
+        fn a_blank_line_that_separates_something_stays() {
+            let src = "import a from 'a'\nimport b from 'b'\n\nconst x = 1\n";
+
+            assert_eq!(remove(src, "b"), "import a from 'a'\n\nconst x = 1\n");
+        }
+
+        #[test]
+        fn crlf_files_stay_crlf_when_removing() {
+            let src = "import a from 'a'\r\nimport b from 'b'\r\n\r\nconst x = 1\r\n";
+
+            assert_eq!(remove(src, "a"), "import b from 'b'\r\n\r\nconst x = 1\r\n");
+        }
+
+        #[test]
+        fn an_indented_import_takes_its_indentation_too() {
+            assert_eq!(
+                remove("  import a from 'a'\nconst x = 1\n", "a"),
+                "const x = 1\n"
+            );
+        }
+
+        #[test]
+        fn the_last_line_of_a_file_without_a_line_break() {
+            assert_eq!(
+                remove("const x = 1\nimport a from 'a'", "a"),
+                "const x = 1\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_import_goes_whole() {
+            let src = "import {\n  a,\n  b,\n} from \"m\"\nconst q = 1\n";
+
+            assert_eq!(remove(src, "m"), "const q = 1\n");
+        }
+
+        #[test]
+        fn every_import_of_the_module_goes_whatever_it_binds() {
+            let src = "import { a } from \"m\"\nimport type { T } from \"m\"\nimport \"m\"\nimport k from \"k\"\n";
+
+            assert_eq!(remove(src, "m"), "import k from \"k\"\n");
+        }
+
+        #[test]
+        fn several_modules_one_per_line_or_as_statements() {
+            let src = "import a from 'a'\nimport b from 'b'\nimport c from 'c'\n";
+
+            assert_eq!(remove(src, "a\nc"), "import b from 'b'\n");
+            assert_eq!(
+                remove(src, "import a from \"a\";\nimport c from \"c\";"),
+                "import b from 'b'\n"
+            );
+            // The statement names the module; what it binds does not matter.
+            assert_eq!(
+                remove(src, "import { zzz } from \"b\""),
+                "import a from 'a'\nimport c from 'c'\n"
+            );
+        }
+
+        #[test]
+        fn a_module_that_is_not_imported_returns_the_file_as_it_was() {
+            let src = "import a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(remove(src, "zzz"), src);
+            assert_eq!(remove(src, "   "), src);
+            assert_eq!(remove(src, ""), src);
+        }
+
+        #[test]
+        fn non_ascii_text_around_the_import_is_kept() {
+            let fa = "\u{0633}\u{0644}\u{0627}\u{0645}";
+            let src =
+                format!("// {fa}\nimport a from 'a' // {fa}\n\n/* {fa} */\nconst x = \"{fa}\"\n");
+
+            assert_eq!(
+                remove(&src, "a"),
+                format!("// {fa}\n\n/* {fa} */\nconst x = \"{fa}\"\n")
+            );
+        }
+
+        #[test]
+        fn adding_then_removing_gives_back_the_file() {
+            let src = "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(remove(&add(src), "zod"), src);
+        }
+
+        #[test]
+        fn removing_twice_changes_nothing() {
+            let once = remove("import a from 'a'\nimport b from 'b'\n", "a");
+            assert_eq!(remove(&once, "a"), once);
+        }
+
+        #[test]
+        fn jsx_is_not_reprinted_when_removing() {
+            let src = "import React from 'react'\nimport z from 'zod'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n";
+
+            assert_eq!(
+                remove(src, "zod"),
+                "import React from 'react'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n"
+            );
+        }
+
+        #[test]
+        fn a_file_that_does_not_parse_is_an_error_when_removing_too() {
+            assert!(remove_import_from_ast("const x = ;;;", "a", Dialect::Tsx).is_err());
         }
     }
 }

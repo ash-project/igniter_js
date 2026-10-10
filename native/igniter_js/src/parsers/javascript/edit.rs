@@ -1353,8 +1353,8 @@ fn insert_one(text: &str, dialect: &str, wanted: &Wanted) -> Result<String, Inse
     let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
     let edit = match all.last() {
         Some(last) => Edit {
-            start: last.end,
-            end: last.end,
+            start: last.line_end,
+            end: last.line_end,
             text: format!("{newline}{statement}"),
         },
         None => match prologue_end(&doc) {
@@ -1412,8 +1412,128 @@ fn prologue_end(doc: &Doc) -> Option<usize> {
         .directives()
         .iter()
         .last()
-        .map(|d| trimmed(d.syntax()).1);
+        .and_then(|d| d.syntax().last_token())
+        .map(|t| usize::from(t.text_range().end()));
     interpreter.max(directive)
+}
+
+// ── removing imports ────────────────────────────────────────────────────────
+
+/// Why a removal could not be made.
+#[derive(Debug, PartialEq, Eq)]
+pub enum RemoveError {
+    /// The file does not parse.
+    Source(String),
+}
+
+/// What a removal request refers to: module names.
+///
+/// The argument is first read as JavaScript. If it holds import statements, the modules those
+/// import from are the targets — which is what keeps a multi-line statement from leaking its lines
+/// as targets. Only when it holds none is each non-empty line a module name as it stands, which is
+/// what lets a bare `topbar` or `../vendor/topbar` work though neither is a valid statement.
+fn removal_targets(modules: &str, dialect: &str) -> Vec<String> {
+    if let Ok(doc) = Doc::parse(modules, dialect) {
+        if let Ok(found) = imports(&doc) {
+            if !found.is_empty() {
+                return found.into_iter().map(|i| i.module).collect();
+            }
+        }
+    }
+
+    modules
+        .lines()
+        .map(|line| line.trim().trim_end_matches(';').trim())
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Remove every import of the named modules, leaving the rest of the file exactly as written.
+///
+/// An import goes whole: its line, a comment after it on that line, and the line break. A comment
+/// on a line of its own above it is left where it is — it may be a licence header or a note about
+/// the file, and keeping a stray comment is a smaller mistake than deleting one that mattered. If
+/// the removal would leave two blank lines in a row, one is taken too.
+///
+/// Matching is on the module a statement imports from, not on what it binds, so removing
+/// `"../vendor/topbar"` takes `import topbar from "../vendor/topbar"` and removing `"topbar"`
+/// does not.
+pub fn remove_imports(source: &str, dialect: &str, modules: &str) -> Result<String, RemoveError> {
+    let targets = removal_targets(modules, dialect);
+    let doc = Doc::parse(source, dialect).map_err(RemoveError::Source)?;
+    if targets.is_empty() {
+        return Ok(source.to_string());
+    }
+
+    let edits: Vec<Edit> = imports(&doc)
+        .map_err(RemoveError::Source)?
+        .iter()
+        .filter(|i| targets.contains(&i.module))
+        .map(|i| whole_line(&doc, i))
+        .collect();
+
+    Ok(apply(source, in_line_endings_of(source, edits)))
+}
+
+/// The range of the line an import is on, including its trailing comment and line break.
+fn whole_line(doc: &Doc, import: &ImportInfo) -> Edit {
+    let text = &doc.text;
+
+    // Back over the indentation, if the import starts its line.
+    let mut start = import.start;
+    let line_start = text[..start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    if text[line_start..start].trim().is_empty() {
+        start = line_start;
+    }
+
+    // Forward over a comment on the same line, then the line break.
+    let mut end = import.end;
+    let rest_of_line = text[end..].find('\n').unwrap_or(text.len() - end);
+    let tail = &text[end..end + rest_of_line];
+    let only_comment = {
+        let t = tail.trim();
+        t.is_empty() || t.starts_with("//") || (t.starts_with("/*") && t.ends_with("*/"))
+    };
+    if only_comment {
+        end += rest_of_line;
+        if text[end..].starts_with("\r\n") {
+            end += 2;
+        } else if text[end..].starts_with('\n') {
+            end += 1;
+        }
+    }
+
+    // Two blank lines in a row are one too many: take the one after.
+    let after_is_blank = text[end..]
+        .lines()
+        .next()
+        .map(|l| l.trim().is_empty())
+        .unwrap_or(false)
+        && end < text.len();
+    let before_is_blank = previous_line(&text[..start])
+        .map(|l| l.trim().is_empty())
+        .unwrap_or(false);
+    if after_is_blank && before_is_blank {
+        let skip = text[end..]
+            .find('\n')
+            .map(|i| i + 1)
+            .unwrap_or(text.len() - end);
+        end += skip;
+    }
+
+    Edit {
+        start,
+        end,
+        text: String::new(),
+    }
+}
+
+/// The line that ends just before this text ends, if there is one.
+fn previous_line(text: &str) -> Option<&str> {
+    let body = text.strip_suffix('\n')?;
+    let body = body.strip_suffix('\r').unwrap_or(body);
+    Some(body.rsplit('\n').next().unwrap_or(body))
 }
 
 // ── imports ─────────────────────────────────────────────────────────────────
@@ -1439,6 +1559,8 @@ struct ImportInfo {
     namespace_local: Option<String>,
     start: usize,
     end: usize,
+    /// Where the statement's line ends: after a comment that follows it on the same line.
+    line_end: usize,
     quote: char,
     semicolon: bool,
     type_only: bool,
@@ -1468,6 +1590,11 @@ fn imports(doc: &Doc) -> Result<Vec<ImportInfo>, String> {
             namespace_local: None,
             start,
             end,
+            line_end: import
+                .syntax()
+                .last_token()
+                .map(|t| usize::from(t.text_range().end()))
+                .unwrap_or(end),
             quote: '"',
             semicolon,
             type_only: false,
@@ -1677,8 +1804,8 @@ fn ensure_imports(doc: &Doc, module: &str, names: &[String]) -> Result<Vec<Edit>
 
     Ok(vec![match all.last() {
         Some(last) => Edit {
-            start: last.end,
-            end: last.end,
+            start: last.line_end,
+            end: last.line_end,
             text: format!("\n{line}"),
         },
         None => Edit {

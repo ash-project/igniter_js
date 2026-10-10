@@ -152,11 +152,51 @@ defmodule IgniterJs.Parsers.Javascript.Parser do
   Parser.remove_imports(js_content, ~s|import topbar from "../vendor/topbar";|)
   Parser.remove_imports(js_content, "phoenix\\n../vendor/topbar")
   Parser.remove_imports("/path/to/file.js", "SomeModule", :path)
+  Parser.remove_imports(tsx_content, "zod", :content, dialect: :tsx)
   ```
 
   Matching is done on the module source, which is the text between the quotes, and not on
   the local binding name. So given `import topbar from "../vendor/topbar";`, removing
-  `"../vendor/topbar"` works but removing `"topbar"` does not.
+  `"../vendor/topbar"` works but removing `"topbar"` does not. Every import of that module goes —
+  `import { a } from "m"`, `import type { T } from "m"` and `import "m"` alike.
+
+  **The rest of the file is returned exactly as it was.** An import goes whole: its line, a
+  comment after it on that line, and the line break. Nothing else is reprinted — comments, blank
+  lines, spacing, quotes, `;` or no `;`, CRLF line endings and JSX stay as written.
+
+  ```js
+  // in
+  import a   from 'a'
+  import b from 'b' // keep
+
+  const  x = {
+      a: 1,   // one
+  }
+  ```
+
+  ```elixir
+  Parser.remove_imports(src, "a", :content, dialect: :ts)
+  ```
+
+  ```js
+  // out
+  import b from 'b' // keep
+
+  const  x = {
+      a: 1,   // one
+  }
+  ```
+
+  A comment on a line of its own above the import is **kept**: it may be a licence header or a
+  note about the file, and a stray comment is a smaller mistake than a deleted one that mattered.
+  When removing would leave two blank lines in a row, one is removed too. A module the file does
+  not import, or an empty argument, returns the file as it was.
+
+  ## Compatibility
+
+  Before this version the whole file was parsed and printed again, which added `;` everywhere,
+  removed blank lines and dropped comments inside objects. A file already in that printer's style
+  comes back the same as before.
   """
   def remove_imports(file_path_or_content, module, type \\ :content, opts \\ [])
 
