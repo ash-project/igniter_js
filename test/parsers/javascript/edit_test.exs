@@ -310,6 +310,18 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
                Edit.add_jsx_props(mine, "RskApp", [setup: {:expr, "rsk"}], mode: :set)
     end
 
+    test "jsx_attributes finds literal and expression values, and ignores comments" do
+      assert {:ok, :jsx_attributes,
+              [
+                %{"element" => "div", "value" => ~s|"flex"|, "literal" => true},
+                %{"element" => "p", "value" => "{c}", "literal" => false}
+              ]} =
+               Edit.jsx_attributes(
+                 ~s|// <i className="in a comment" />\nconst a = <div className="flex" id={x}><p className={c} /></div>|,
+                 "className"
+               )
+    end
+
     test "jsx_elements lists names in source order" do
       assert {:ok, :jsx_elements, ["A", "B", "C.D"]} =
                Edit.jsx_elements("const a = <A><B /><C.D /></A>")

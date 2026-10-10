@@ -24,7 +24,7 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
     * JSX — `wrap_jsx/4`, `unwrap_jsx/3`, `add_jsx_props/4`
     * imports — `ensure_imports/4`, `move_imports/5`
     * and questions about a file — `object_members/3`, `member_values/3`, `jsx_elements/2`,
-      `imports/2`
+      `jsx_attributes/3`, `imports/2`
 
   ## Targets
 
@@ -412,6 +412,32 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       {:ok, function, pairs} -> {:ok, function, Enum.map(pairs, fn [k, v] -> {k, v} end)}
       error -> error
     end
+  end
+
+  @doc """
+  Every JSX attribute with a given name, in source order.
+
+  Each is a map: `"element"` it is on, `"name"`, `"value"` as written (`nil` for a bare attribute
+  such as `hidden`) and `"literal"` — `true` for a plain string (`className="flex"`), `false` for
+  an expression (`className={cls}`).
+
+  Found in the syntax tree, so a comment or docblock that merely *shows* the attribute is not one:
+
+  ```elixir
+  Edit.jsx_attributes(~s|const a = <div className="flex" id={x}><p className={c} /></div>|, "className", dialect: :tsx)
+  #=> {:ok, :jsx_attributes, [
+  #     %{"element" => "div", "name" => "className", "value" => ~s|"flex"|, "literal" => true},
+  #     %{"element" => "p", "name" => "className", "value" => "{c}", "literal" => false}
+  #   ]}
+  ```
+  """
+  @spec jsx_attributes(String.t(), String.t(), keyword()) ::
+          {:ok, atom(), [map()]} | {:error, atom(), String.t()}
+  def jsx_attributes(file_path_or_content, name, opts \\ []) do
+    ask(file_path_or_content, __ENV__.function, with_dialect(opts, :tsx), %{
+      op: "jsx_attributes",
+      name: name
+    })
   end
 
   @doc """

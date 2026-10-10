@@ -1514,6 +1514,43 @@ mod jsx {
     }
 
     #[test]
+    fn attributes_of_a_name_say_whether_they_are_plain_strings() {
+        let src = "const a = (\n  <div className=\"flex\" id={x}>\n    <p className={cls} hidden />\n    <span className='a b' />\n  </div>\n)\n";
+        let answer = query(
+            src,
+            "tsx",
+            &Query::JsxAttributes {
+                name: "className".into(),
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&answer).unwrap();
+
+        assert_eq!(v.as_array().unwrap().len(), 3);
+        assert_eq!(v[0]["element"], "div");
+        assert_eq!(v[0]["value"], "\"flex\"");
+        assert_eq!(v[0]["literal"], true);
+        assert_eq!(v[1]["element"], "p");
+        assert_eq!(v[1]["value"], "{cls}");
+        assert_eq!(v[1]["literal"], false);
+        assert_eq!(v[2]["literal"], true);
+    }
+
+    #[test]
+    fn a_comment_that_mentions_an_attribute_is_not_one() {
+        let src = "/**\n * Example:\n *   <div className=\"flex flex-col\">\n */\n// <p className=\"x\" />\nexport const a = 1\n";
+        let answer = query(
+            src,
+            "tsx",
+            &Query::JsxAttributes {
+                name: "className".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(answer, "[]");
+    }
+
+    #[test]
     fn elements_are_listed_in_source_order() {
         let answer = query(
             "const a = <A><B /><C.D /></A>\n",

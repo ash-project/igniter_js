@@ -43,10 +43,10 @@ use biome_js_parser::{parse, JsParserOptions};
 use biome_js_syntax::{
     AnyJsArrayElement, AnyJsCombinedSpecifier, AnyJsExpression, AnyJsFunctionBody,
     AnyJsImportClause, AnyJsNamedImportSpecifier, AnyJsObjectMember, AnyJsObjectMemberName,
-    AnyJsStatement, AnyJsxAttribute, AnyJsxChild, JsArrayExpression, JsCallExpression,
-    JsExportDefaultExpressionClause, JsFunctionBody, JsImport, JsModule, JsNamedImportSpecifiers,
-    JsObjectExpression, JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator, JsxElement,
-    JsxSelfClosingElement,
+    AnyJsStatement, AnyJsxAttribute, AnyJsxAttributeValue, AnyJsxChild, JsArrayExpression,
+    JsCallExpression, JsExportDefaultExpressionClause, JsFunctionBody, JsImport, JsModule,
+    JsNamedImportSpecifiers, JsObjectExpression, JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator,
+    JsxElement, JsxSelfClosingElement,
 };
 use biome_json_parser::{parse_json, JsonParserOptions};
 use biome_json_syntax::{AnyJsonValue, JsonArrayValue, JsonObjectValue};
@@ -188,6 +188,8 @@ pub enum Query {
         #[serde(default)]
         container: Container,
     },
+    /// Every JSX attribute of a name, in source order, as `{element, name, value, literal}`.
+    JsxAttributes { name: String },
     /// Every JSX element name in the file, in source order, with duplicates.
     JsxElements,
     /// Every `import … from "…"`: module, named imports, whether it is type-only.
@@ -809,6 +811,27 @@ pub fn query(source: &str, dialect: &str, query: &Query) -> Result<String, Strin
                 .collect();
             serde_json::json!(pairs)
         }
+        Query::JsxAttributes { name } => {
+            let found: Vec<serde_json::Value> = jsx_elements(&doc)?
+                .into_iter()
+                .flat_map(|el| {
+                    let element = el.name.clone();
+                    el.attr_values
+                        .into_iter()
+                        .filter(|(n, _, _)| n == name)
+                        .map(move |(n, value, literal)| {
+                            serde_json::json!({
+                                "element": element,
+                                "name": n,
+                                "value": value,
+                                "literal": literal,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            serde_json::json!(found)
+        }
         Query::JsxElements => {
             let names: Vec<String> = jsx_elements(&doc)?.into_iter().map(|e| e.name).collect();
             serde_json::json!(names)
@@ -1168,6 +1191,9 @@ struct El {
     /// Where a new attribute goes: right after the name (and its type arguments).
     props_at: usize,
     attributes: Vec<(String, usize, usize)>,
+    /// Each attribute's value as written, and whether it is a plain string (`name="x"`) rather
+    /// than an expression (`name={x}`) or nothing (`disabled`).
+    attr_values: Vec<(String, Option<String>, bool)>,
     /// Is this element a child of another JSX element or fragment?
     in_jsx: bool,
 }
@@ -1214,6 +1240,7 @@ fn jsx_elements(doc: &Doc) -> Result<Vec<El>, String> {
                 children,
                 props_at,
                 attributes: attributes_of(opening.attributes().iter()),
+                attr_values: attribute_values(opening.attributes().iter()),
                 in_jsx: in_jsx(el.syntax()),
             });
         } else if let Some(el) = JsxSelfClosingElement::cast(node) {
@@ -1230,6 +1257,7 @@ fn jsx_elements(doc: &Doc) -> Result<Vec<El>, String> {
                 children: Vec::new(),
                 props_at,
                 attributes: attributes_of(el.attributes().iter()),
+                attr_values: attribute_values(el.attributes().iter()),
                 in_jsx: in_jsx(el.syntax()),
             });
         }
@@ -1251,6 +1279,23 @@ fn attributes_of(attributes: impl Iterator<Item = AnyJsxAttribute>) -> Vec<(Stri
             AnyJsxAttribute::JsxAttribute(attr) => {
                 let (s, e) = trimmed(attr.syntax());
                 Some((attr.name().ok()?.syntax().text_trimmed().to_string(), s, e))
+            }
+            AnyJsxAttribute::JsxSpreadAttribute(_) => None,
+        })
+        .collect()
+}
+
+fn attribute_values(
+    attributes: impl Iterator<Item = AnyJsxAttribute>,
+) -> Vec<(String, Option<String>, bool)> {
+    attributes
+        .filter_map(|a| match a {
+            AnyJsxAttribute::JsxAttribute(attr) => {
+                let name = attr.name().ok()?.syntax().text_trimmed().to_string();
+                let value = attr.initializer().and_then(|i| i.value().ok());
+                let literal = matches!(&value, Some(AnyJsxAttributeValue::JsxString(_)));
+                let text = value.map(|v| v.syntax().text_trimmed().to_string());
+                Some((name, text, literal))
             }
             AnyJsxAttribute::JsxSpreadAttribute(_) => None,
         })
