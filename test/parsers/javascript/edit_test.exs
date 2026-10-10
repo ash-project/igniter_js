@@ -364,6 +364,24 @@ defmodule IgniterJSTest.Parsers.Javascript.EditTest do
                )
     end
 
+    test "remove_import_names takes names out, and the whole line when none are left" do
+      assert {:ok, :remove_import_names, ~s(import { Link } from "react-router"\n)} =
+               Edit.remove_import_names(
+                 ~s(import { BrowserRouter, Link } from "react-router"\n),
+                 "react-router",
+                 ["BrowserRouter"],
+                 dialect: :ts
+               )
+
+      assert {:ok, _, "const x = 1\n"} =
+               Edit.remove_import_names(
+                 ~s(import { BrowserRouter } from "react-router" // router\nconst x = 1\n),
+                 "react-router",
+                 ["BrowserRouter"],
+                 dialect: :ts
+               )
+    end
+
     test "imports/2 lists every import" do
       assert {:ok, :imports, [first, second]} =
                Edit.imports(~s(import a, { b, c as d } from "m"\nimport type { T } from "t"\n),

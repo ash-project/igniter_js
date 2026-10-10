@@ -166,6 +166,10 @@ pub enum Request {
         to: String,
         names: Vec<String>,
     },
+    RemoveNamedImports {
+        module: String,
+        names: Vec<String>,
+    },
 }
 
 /// A question about a source, answered as JSON.
@@ -739,6 +743,10 @@ pub fn edit(source: &str, dialect: &str, request: &Request) -> Result<String, St
         Request::EnsureImports { module, names } => ensure_imports(&doc, module, names)?,
         Request::MoveImports { from, to, names } => {
             return move_imports(&doc, dialect, from, to, names)
+        }
+        Request::RemoveNamedImports { module, names } => {
+            let all = imports(&doc)?;
+            remove_names(&doc, &all, module, names).0
         }
     };
 
@@ -2044,18 +2052,21 @@ fn ensure_imports(doc: &Doc, module: &str, names: &[String]) -> Result<Vec<Edit>
     }])
 }
 
-fn move_imports(
+/// The edits that take `names` out of every import of `module`, and the names that were there.
+///
+/// An import left with no names goes whole, by `whole_line` — its line, a comment after it and the
+/// line break. One that keeps others loses only the removed specifiers, each with its separator,
+/// so what sits between the rest — their comments included — stays as it is.
+fn remove_names(
     doc: &Doc,
-    dialect: &str,
-    from: &str,
-    to: &str,
+    all: &[ImportInfo],
+    module: &str,
     names: &[String],
-) -> Result<String, String> {
-    let all = imports(doc)?;
-    let mut moved: Vec<String> = Vec::new();
+) -> (Vec<Edit>, Vec<String>) {
+    let mut removed: Vec<String> = Vec::new();
     let mut edits = Vec::new();
 
-    for import in all.iter().filter(|i| i.module == from && !i.type_only) {
+    for import in all.iter().filter(|i| i.module == module && !i.type_only) {
         let gone: Vec<&Spec> = import
             .named
             .iter()
@@ -2064,28 +2075,17 @@ fn move_imports(
         if gone.is_empty() {
             continue;
         }
-        moved.extend(gone.iter().map(|s| s.name.clone()));
+        removed.extend(gone.iter().map(|s| s.name.clone()));
 
         let everything_goes =
             gone.len() == import.named.len() && import.default.is_none() && !import.namespace;
 
         if everything_goes {
-            // The whole line goes, and its line break with it.
-            let end = if doc.text[import.end..].starts_with('\n') {
-                import.end + 1
-            } else {
-                import.end
-            };
-            edits.push(Edit {
-                start: import.start,
-                end,
-                text: String::new(),
-            });
+            edits.push(whole_line(doc, import));
             continue;
         }
 
-        // Runs of removed specifiers, each taken out with its separators, so what sits between the
-        // others — their comments included — is left as it is.
+        // Runs of removed specifiers, each taken out with its separators.
         let specs = &import.named;
         let mut i = 0;
         while i < specs.len() {
@@ -2116,6 +2116,19 @@ fn move_imports(
             i = j + 1;
         }
     }
+
+    (edits, removed)
+}
+
+fn move_imports(
+    doc: &Doc,
+    dialect: &str,
+    from: &str,
+    to: &str,
+    names: &[String],
+) -> Result<String, String> {
+    let all = imports(doc)?;
+    let (edits, mut moved) = remove_names(doc, &all, from, names);
 
     if moved.is_empty() {
         return Ok(doc.text.clone());

@@ -22,7 +22,7 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
 
     * object and array members — `merge_object_members/4`, `merge_array_members/4`
     * JSX — `wrap_jsx/4`, `unwrap_jsx/3`, `add_jsx_props/4`
-    * imports — `ensure_imports/4`, `move_imports/5`
+    * imports — `ensure_imports/4`, `move_imports/5`, `remove_import_names/4`
     * and questions about a file — `object_members/3`, `member_values/3`, `jsx_elements/2`,
       `jsx_attributes/3`, `imports/2`
 
@@ -350,6 +350,30 @@ defmodule IgniterJs.Parsers.Javascript.Edit do
       op: "move_imports",
       from: from,
       to: to,
+      names: names
+    })
+  end
+
+  @doc """
+  Take named imports out of a module's imports, leaving the rest as written.
+
+  An import left with no names goes whole — its line, a comment after it and the line break; one
+  that keeps others loses only the removed names, and what is between the others stays.
+
+  ```elixir
+  Edit.remove_import_names(~s(import { BrowserRouter, Link } from "react-router"\n), "react-router", ["BrowserRouter"], dialect: :ts)
+  #=> {:ok, :remove_import_names, ~s(import { Link } from "react-router"\n)}
+  ```
+
+  Unlike `Parser.remove_imports/4`, which removes every import of a module, this removes names —
+  for the import a codemod just left unused (`noUnusedLocals` turns that into a build error).
+  """
+  @spec remove_import_names(String.t(), String.t(), [String.t()], keyword()) ::
+          {:ok, atom(), String.t()} | {:error, atom(), String.t()}
+  def remove_import_names(file_path_or_content, module, names, opts \\ []) do
+    run(file_path_or_content, __ENV__.function, opts, %{
+      op: "remove_named_imports",
+      module: module,
       names: names
     })
   end

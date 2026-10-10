@@ -178,6 +178,18 @@ fn ensure(source: &str, module: &str, names: &[&str]) -> String {
     .unwrap()
 }
 
+fn remove_names(source: &str, module: &str, names: &[&str]) -> String {
+    edit(
+        source,
+        "ts",
+        &Request::RemoveNamedImports {
+            module: module.into(),
+            names: names.iter().map(|s| s.to_string()).collect(),
+        },
+    )
+    .unwrap()
+}
+
 fn move_to(source: &str, from: &str, to: &str, names: &[&str]) -> String {
     edit(
         source,
@@ -1734,6 +1746,54 @@ mod imports {
     fn moving_twice_changes_nothing() {
         let once = move_to("import { a, b } from \"x\"\n", "x", "y", &["b"]);
         assert_eq!(move_to(&once, "x", "y", &["b"]), once);
+    }
+
+    #[test]
+    fn removing_a_name_keeps_the_others_and_their_comments() {
+        let src = "import { A, B, C } from \"m\" // all\nconst x = 1\n";
+        assert_eq!(
+            remove_names(src, "m", &["B"]),
+            "import { A, C } from \"m\" // all\nconst x = 1\n"
+        );
+        assert_eq!(
+            remove_names(src, "m", &["C"]),
+            "import { A, B } from \"m\" // all\nconst x = 1\n"
+        );
+        assert_eq!(
+            remove_names(src, "m", &["A", "B"]),
+            "import { C } from \"m\" // all\nconst x = 1\n"
+        );
+    }
+
+    #[test]
+    fn removing_the_only_name_removes_the_whole_line() {
+        let src = "import a from 'a'\nimport { BrowserRouter } from \"react-router\" // the router\nconst x = 1\n";
+        assert_eq!(
+            remove_names(src, "react-router", &["BrowserRouter"]),
+            "import a from 'a'\nconst x = 1\n"
+        );
+    }
+
+    #[test]
+    fn removing_a_name_that_is_not_imported_changes_nothing() {
+        let src = "import { A } from \"m\"\n";
+        assert_eq!(remove_names(src, "m", &["Z"]), src);
+        assert_eq!(remove_names(src, "other", &["A"]), src);
+    }
+
+    #[test]
+    fn a_multiline_list_loses_only_the_names() {
+        let src = "import {\n  A,\n  B,\n  C,\n} from \"m\"\n";
+        assert_eq!(
+            remove_names(src, "m", &["B"]),
+            "import {\n  A,\n  C,\n} from \"m\"\n"
+        );
+    }
+
+    #[test]
+    fn removing_twice_changes_nothing() {
+        let once = remove_names("import { A, B } from \"m\"\n", "m", &["B"]);
+        assert_eq!(remove_names(&once, "m", &["B"]), once);
     }
 
     #[test]
