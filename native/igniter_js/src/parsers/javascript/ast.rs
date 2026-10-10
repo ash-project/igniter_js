@@ -1197,6 +1197,123 @@ mod tests {
             assert_eq!(result.unwrap_err(), "Index out of bounds");
         }
     }
+
+    /// What the swc-based import codemods do to a file that is not already in the printer's own
+    /// style.
+    ///
+    /// Every fixture above is written the way swc prints (`;`, one blank-line-free block), so none
+    /// of them can show it: parsing, editing and PRINTING AGAIN rewrites the whole file. These pin
+    /// the behaviour down as it is today — not as a recommendation — so a change to it is a
+    /// decision somebody makes on purpose, with the difference in front of them.
+    ///
+    /// Non-ASCII text is written with `\u{..}` escapes, so this file stays ASCII.
+    mod messy_files {
+        use super::*;
+
+        const ZOD: &str = "import { z } from \"zod\"";
+
+        fn add(src: &str) -> String {
+            insert_import_to_ast(src, ZOD, Dialect::Tsx).unwrap()
+        }
+
+        #[test]
+        fn semicolons_are_added_blank_lines_go_and_a_comment_inside_an_object_is_dropped() {
+            let src = "// the app entry\nimport { createRsk } from \"@rsk/core\" // core\n\n/* config */\nimport a   from 'a'\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(
+                add(src),
+                "// the app entry\nimport { createRsk } from \"@rsk/core\"; // core\n/* config */ import a from 'a';\nimport { z } from \"zod\";\nconst x = {\n    a: 1\n};\n"
+            );
+        }
+
+        #[test]
+        fn a_header_comment_is_glued_onto_the_directive_that_follows_it() {
+            let src =
+                "/**\n * Copyright\n */\n'use strict'\n\nimport a from 'a'\n\nexport const y = 1\n";
+
+            assert_eq!(
+                add(src),
+                "/**\n * Copyright\n */ 'use strict';\nimport a from 'a';\nimport { z } from \"zod\";\nexport const y = 1;\n"
+            );
+        }
+
+        #[test]
+        fn groups_of_imports_lose_the_blank_lines_between_them() {
+            let src = "import react from 'react'\nimport dom from 'react-dom'\n\nimport local from './local'\n\nconst z = <div/>\n";
+
+            assert_eq!(
+                add(src),
+                "import react from 'react';\nimport dom from 'react-dom';\nimport local from './local';\nimport { z } from \"zod\";\nconst z = <div/>;\n"
+            );
+        }
+
+        #[test]
+        fn a_multiline_import_is_collapsed_onto_one_line() {
+            let src = "import {\n  a,\n  b,\n} from \"m\"\n\nconst q = 1\n";
+
+            assert_eq!(
+                add(src),
+                "import { a, b } from \"m\";\nimport { z } from \"zod\";\nconst q = 1;\n"
+            );
+        }
+
+        #[test]
+        fn crlf_line_endings_become_lf() {
+            let src = "import a from 'a'\r\n\r\nconst x = 1\r\n";
+
+            assert_eq!(
+                add(src),
+                "import a from 'a';\nimport { z } from \"zod\";\nconst x = 1;\n"
+            );
+        }
+
+        #[test]
+        fn jsx_is_reprinted_in_swcs_own_layout() {
+            let src = "import React from 'react'\n\nexport const App = () => (\n  <div className=\"a\">\n    hi\n  </div>\n)\n";
+
+            assert_eq!(
+                add(src),
+                "import React from 'react';\nimport { z } from \"zod\";\nexport const App = ()=>(<div className=\"a\">\n    hi\n  </div>);\n"
+            );
+        }
+
+        #[test]
+        fn non_ascii_comments_and_strings_survive_but_the_layout_does_not() {
+            let fa = "\u{0633}\u{0644}\u{0627}\u{0645}";
+            let src = format!("// {fa}\nimport a from 'a'\n\n/* {fa} */\nconst x = \"{fa}\"\n");
+
+            assert_eq!(
+                add(&src),
+                format!("// {fa}\nimport a from 'a';\nimport {{ z }} from \"zod\";\n/* {fa} */ const x = \"{fa}\";\n")
+            );
+        }
+
+        #[test]
+        fn a_name_for_a_module_that_is_already_imported_becomes_a_second_import() {
+            let src = "import { createRsk } from \"@rsk/core\";\n";
+            let out = insert_import_to_ast(
+                src,
+                "import { i18nPreset } from \"@rsk/core\"",
+                Dialect::Tsx,
+            )
+            .unwrap();
+
+            assert_eq!(
+                out,
+                "import { createRsk } from \"@rsk/core\";\nimport { i18nPreset } from \"@rsk/core\";\n"
+            );
+        }
+
+        #[test]
+        fn removing_an_import_reprints_the_rest_of_the_file_too() {
+            let src = "import a   from 'a'\nimport b from 'b' // keep\n\nconst  x = {\n    a: 1,   // one\n}\n";
+
+            assert_eq!(
+                remove_import_from_ast(src, "a", Dialect::Tsx).unwrap(),
+                "import b from 'b'; // keep\nconst x = {\n    a: 1\n};\n"
+            );
+        }
+    }
 }
 
 // Sample code
