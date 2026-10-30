@@ -14,17 +14,17 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-swc_common = { version = "24.0.0", features = ["tty-emitter"] }
-swc_ecma_parser = { version = "43.0.0" }
-swc_ecma_visit = "27.0.0"
-swc_ecma_ast = "27.0.0"
-swc_ecma_codegen = "30.0.0"
+swc_common = { version = "27.0.0", features = ["tty-emitter"] }
+swc_ecma_parser = { version = "47.0.0" }
+swc_ecma_visit = "30.0.0"
+swc_ecma_ast = "30.0.0"
+swc_ecma_codegen = "33.0.0"
 rustler = "=0.38.0"
 
-biome_console = "=0.5.7"
+biome_console = "=0.5.8"
 biome_deserialize = "=0.5.7"
 biome_deserialize_macros = "=0.5.7"
-biome_diagnostics = "=0.5.7"
+biome_diagnostics = "=0.5.8"
 biome_diagnostics_categories = "=0.5.7"
 biome_diagnostics_macros = "=0.5.7"
 biome_formatter = "=0.5.7"
@@ -38,18 +38,18 @@ biome_json_syntax = "=0.5.7"
 biome_markup = "=0.5.7"
 biome_parser = "=0.5.7"
 biome_rowan = "=0.5.7"
-biome_text_edit = "=0.5.7"
-biome_text_size = "=0.5.7"
+biome_text_edit = "=0.5.8"
+biome_text_size = "=0.5.8"
 biome_unicode_table = "=0.5.7"
 biome_css_formatter = "=0.5.7"
 biome_css_parser = "=0.5.7"
 biome_css_syntax = "=0.5.7"
 biome_css_factory = "=0.5.7"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-oxc_allocator = "0.142.0"
-oxc_ast = "0.142.0"
-oxc_parser = "0.142.0"
-oxc_span = "0.142.0"
-oxc_ast_visit = { version = "0.142.0", features = ["serialize"] }
-oxc_diagnostics = "0.142.0"
+serde_json = "1.0.154"
+oxc_allocator = "0.156.0"
+oxc_ast = "0.156.0"
+oxc_parser = "0.156.0"
+oxc_span = "0.156.0"
+oxc_ast_visit = { version = "0.156.0", features = ["serialize"] }
+oxc_diagnostics = "0.156.0"

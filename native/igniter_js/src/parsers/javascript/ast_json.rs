@@ -84,9 +84,8 @@ pub fn convert_ast_to_estree_as(source_text: &str, dialect: Dialect) -> Result<S
                     e.labels
                         .iter()
                         .map(|label| {
-                            let span = label.inner();
-                            let start = span.offset();
-                            let end = start + span.len();
+                            let start = label.offset();
+                            let end = start + label.len();
 
                             json!({
                                 "start": start,
@@ -215,6 +214,43 @@ mod tests {
                 "labels must be null or an array, got {labels}"
             );
         }
+    }
+
+    /// A labelled diagnostic reports each label's byte range, its text and
+    /// whether it is the primary one.
+    #[test]
+    fn test_diagnostic_labels_carry_their_range() {
+        let value = parse_to_value("if (x) { ");
+
+        assert_eq!(
+            value["errors"][0]["labels"],
+            json!([
+                {"start": 9, "end": 9, "label": "`}` expected", "primary": true},
+                {"start": 7, "end": 8, "label": "Opened here", "primary": false},
+            ])
+        );
+    }
+
+    /// A label without text serializes its text as `null`.
+    #[test]
+    fn test_label_without_text_serializes_as_null() {
+        let value = parse_to_value("const a = ;");
+
+        assert_eq!(
+            value["errors"][0]["labels"],
+            json!([{"start": 10, "end": 11, "label": null, "primary": false}])
+        );
+    }
+
+    /// Label offsets are UTF-8 byte offsets into the source, not characters.
+    #[test]
+    fn test_label_offsets_count_bytes() {
+        let value = parse_to_value("const \u{e9}\u{e9} = ;");
+
+        assert_eq!(
+            value["errors"][0]["labels"],
+            json!([{"start": 13, "end": 14, "label": null, "primary": false}])
+        );
     }
 
     #[test]
