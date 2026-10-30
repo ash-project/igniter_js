@@ -113,7 +113,7 @@ defmodule IgniterJs.MixProject do
     [
       {:rustler, "~> 0.38.0", optional: true},
       {:jason, "~> 1.4"},
-      {:rustler_precompiled, "~> 0.9"},
+      {:rustler_precompiled, "~> 0.10 and >= 0.10.1"},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.16", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
