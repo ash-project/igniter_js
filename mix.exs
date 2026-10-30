@@ -15,7 +15,7 @@ defmodule IgniterJs.MixProject do
     [
       app: :igniter_js,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.17",
       package: package(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
